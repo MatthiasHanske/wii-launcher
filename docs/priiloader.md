@@ -47,6 +47,7 @@ Die installierte Version 0.8b1 (2012) wird ersetzt; erst ab 0.10.0 sind die Magi
 1. Wii ausschalten. Reset gedrückt halten und dabei die Wii einschalten, bis das Priiloader-Menü erscheint.
 2. "Load/Install File" wählen und `sd:/forwarder.dol` auswählen, Installation bestätigen.
    (Liegt die Datei nicht im Wurzelverzeichnis: Deploy-Script erneut ausführen.)
+   Tastenbelegung für Laden/Installieren in diesem Menü: noch am Fernseher bestätigen (TODO, hier eintragen).
 3. Zurück ins Hauptmenü, "Settings" öffnen.
 4. "Autoboot" auf "Installed File" stellen und speichern ("Save settings").
 5. Zurück ins Hauptmenü und "Installed File" einmal von Hand starten: Der Launcher muss erscheinen.
@@ -62,6 +63,12 @@ Nach der Einrichtung diese Fälle einmal durchgehen und im Testprotokoll (`docs/
 | Im Launcher Home, "Wii-Menü" | Echtes Wii-Menü, kein erneuter Autoboot |
 | Reset gedrückt halten beim Einschalten | Priiloader-Menü |
 | SD-Karte entfernt, Wii einschalten | Hinweis "Launcher nicht gefunden auf SD ...", nach 5 s Homebrew Channel |
+
+### Ohne SD-Karte
+
+Fehlt die SD-Karte, entsteht ein Kreislauf: Forwarder (Meldung, 5 s) → Homebrew Channel → beim Verlassen des HBC
+Wii-Menü-Neustart → Priiloader-Autoboot → wieder der Forwarder. Das echte Wii-Menü ist dann nur noch über das
+Priiloader-Menü erreichbar: Wii ausschalten, Reset gedrückt halten und einschalten, dort "System Menu" starten.
 
 ## Autoboot zurücknehmen
 

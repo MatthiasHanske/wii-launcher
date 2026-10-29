@@ -15,6 +15,8 @@ make test       # Host-Tests der Core-Logik
 
 `tools/deploy-sd.sh` kopiert den Launcher nach `/Volumes/WII/apps/launcher/` (`boot.dol`, `meta.xml`, `icon.png`), den Forwarder nach `/Volumes/WII/forwarder.dol` und legt bei Bedarf `/Volumes/WII/launcher/settings.txt` und `dosbox.conf.tpl` an (vorhandene Dateien bleiben unberührt, `--force-tpl` überschreibt `dosbox.conf.tpl`). Ist die USB-Platte `/Volumes/WII-ROMS` gemountet, entsteht außerdem `dosbox/SimCity 2000/autoexec.txt`. `._*`-Dateien werden entfernt, die SD wird nicht ausgeworfen. Mit `--dry-run` wird nur angezeigt, was passieren würde. Am Ende warnt das Skript, wenn Startprogramme fehlen, die der Launcher aufruft (USB Loader GX, Not64, Snes9x GX, FCEUGX, Genesis Plus GX, ScummVM, DOSBox), bricht deswegen aber nicht ab.
 
+Rückweg aus Spielen: Vor dem Priiloader-Update landet man nach einem Spiel im Wii-Menü, nicht im HBC (der Launcher löscht den HBC-Stub vor dem Start).
+
 Priiloader-Autostart einrichten: `docs/priiloader.md`. Toolchain: `docs/toolchain.md`. Testergebnisse: `docs/testprotokoll.md`.
 
 ## Wii-Upload
