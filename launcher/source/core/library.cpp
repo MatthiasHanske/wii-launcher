@@ -1,0 +1,86 @@
+#include "core/library.h"
+
+#include <algorithm>
+#include <utility>
+
+namespace {
+char lower(char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c; }
+}
+
+Library::Library(std::vector<Game> games) : games_(std::move(games)) {
+    std::stable_sort(games_.begin(), games_.end(),
+                     [](const Game& a, const Game& b) { return a.sortKey < b.sortKey; });
+    rebuild();
+}
+
+void Library::setEnabled(const SystemSet& s) {
+    enabled_ = s;
+    rebuild();
+}
+
+void Library::setTab(std::optional<System> tab) {
+    tab_ = tab;
+    rebuild();
+}
+
+std::vector<System> Library::tabs() const {
+    std::vector<System> out;
+    for (int i = 0; i < 7; ++i)
+        if (enabled_.enabled[i]) out.push_back(static_cast<System>(i));
+    return out;
+}
+
+void Library::rebuild() {
+    std::fill(firstIdx_, firstIdx_ + 256, -1);
+    visible_.clear();
+    visible_.reserve(games_.size());
+    bool single = tab_.has_value() && enabled_.get(*tab_);
+    for (const Game& g : games_) {
+        if (!enabled_.get(g.system)) continue;
+        if (single && g.system != *tab_) continue;
+        int& f = firstIdx_[static_cast<unsigned char>(g.letter)];
+        if (f < 0) f = static_cast<int>(visible_.size());
+        visible_.push_back(&g);
+    }
+}
+
+std::vector<char> Library::letters() const {
+    std::vector<char> out;
+    if (firstIdx_[static_cast<unsigned char>('#')] >= 0) out.push_back('#');
+    for (int c = 'A'; c <= 'Z'; ++c)
+        if (firstIdx_[c] >= 0) out.push_back(static_cast<char>(c));
+    return out;
+}
+
+int Library::firstIndexForLetter(char c) const {
+    return firstIdx_[static_cast<unsigned char>(c)];
+}
+
+std::vector<const Game*> Library::search(const std::string& query, size_t limit) const {
+    std::vector<const Game*> out;
+    if (query.empty() || limit == 0) return out;
+    std::string q = query;
+    for (char& c : q) c = lower(c);
+    std::string t;
+    for (const Game& g : games_) {
+        if (!enabled_.get(g.system)) continue;
+        t.assign(g.title);
+        for (char& c : t) c = lower(c);
+        if (t.find(q) != std::string::npos) {
+            out.push_back(&g);
+            if (out.size() >= limit) break;
+        }
+    }
+    return out;
+}
+
+int Library::pageCount() const {
+    return static_cast<int>((visible_.size() + kPageSize - 1) / kPageSize);
+}
+
+std::vector<const Game*> Library::page(int index) const {
+    if (index < 0 || index >= pageCount()) return {};
+    size_t b = static_cast<size_t>(index) * kPageSize;
+    size_t e = std::min(visible_.size(), b + kPageSize);
+    return std::vector<const Game*>(visible_.begin() + b, visible_.begin() + e);
+}
