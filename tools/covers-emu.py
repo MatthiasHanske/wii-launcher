@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
-"""Laedt Emulator-Cover (Libretro-Thumbnails) fuer N64, SNES, NES und Sega.
+"""Laedt Emulator-Cover (Libretro-Thumbnails) fuer N64, SNES, NES, Sega und Adventure (dos).
 
-Aufruf: python3 -I tools/covers-emu.py [--dry-run] [--system n64|snes|nes|sega] [--limit N]
+Aufruf: python3 -I tools/covers-emu.py [--dry-run] [--system n64|snes|nes|sega|dos]
+                                       [--limit N] [--refresh] [--only TEILSTRING]
 Ziel:   /Volumes/WII/launcher/covers/<systemKey>/<Dateiname ohne Endung>.png
+        dos: /Volumes/WII/launcher/covers/dos/<Spielordner>.png (scummvm/ und dosbox/ auf der USB)
+
+  --dry-run   nur Trefferbericht, nichts herunterladen
+  --refresh   vorhandene Zieldateien neu laden und ueberschreiben (sonst uebersprungen)
+  --only STR  nur ROMs/Spielordner, deren Name STR enthaelt (ohne Gross-/Kleinschreibung)
+
+Cover werden auf hoechstens 320x228 verkleinert (Seitenverhaeltnis bleibt).
+dos: ScummVM-Ordner suchen zuerst im Libretro-Repo "ScummVM", dann in "DOS"; dosbox-Ordner nur in "DOS".
+Ordnernamen sind oft Kurzformen; dann trifft auch ein zusammenhaengender Teilstring des Libretro-Namens.
 """
 import argparse
 import difflib
@@ -22,8 +32,9 @@ BACKUP = "/Users/matthias/Backups/WII-SD-2026-10-28"
 CACHE = os.path.expanduser("~/.cache/wii-launcher-covers")
 ORG = "libretro-thumbnails"
 THRESHOLD = 0.85
-# Groesse der 2D-Cover von USB Loader GX; groessere Bilder kosten auf der Wii nur Speicher.
-MAX_W, MAX_H = 160, 228
+# Die Launcher-Vorschau zeigt Cover im echten Seitenverhaeltnis: hochkant bis 160x228,
+# querformatige Boxen (Sega, SNES-PAL u.a.) brauchen Breite, daher bis 320x228.
+MAX_W, MAX_H = 320, 228
 _warned_resize = False
 
 # systemKey -> Liste von (Repo, Endungen)
@@ -45,6 +56,9 @@ BACKUP_DIRS = ["not64/roms", "snes9xgx/roms", "wiimednafen/roms/Master System",
                "wiimednafen/roms/Mega Drive"]
 ADV_GLOBS = ["scummvm", "dosbox"]  # USB-Unterordner = je ein Spiel
 ADV_BACKUP = ["dos"]
+# Adventure-Unterordner -> Libretro-Repos in Suchreihenfolge
+ADV_REPOS = {"scummvm": ["ScummVM", "DOS"], "dosbox": ["DOS"], "dos": ["DOS"]}
+DOS_KEY = "dos"
 
 
 class RateLimit(Exception):
@@ -171,6 +185,16 @@ class Index:
             self.by_norm.setdefault(norm(n), n)
         self.keys = list(self.by_norm)
 
+    def match_contains(self, title_norm):
+        """Normierter Titel als zusammenhaengender Teil eines Libretro-Namens (kuerzester gewinnt)."""
+        if len(title_norm) < 6:
+            return None, 0.0
+        cands = [k for k in self.keys if title_norm in k]
+        if not cands:
+            return None, 0.0
+        best = min(cands, key=lambda k: len(k))  # min ist stabil: Region-Rang bleibt Reihenfolge
+        return self.by_norm[best], 0.9
+
     def match(self, title_norm):
         if not title_norm:
             return None, 0.0
@@ -221,15 +245,17 @@ def scan_adventure(base, subs):
         if os.path.isdir(p):
             for fn in sorted(os.listdir(p)):
                 if not fn.startswith(".") and os.path.isdir(os.path.join(p, fn)):
-                    games.append(f"{s}/{fn}")
+                    games.append((s, fn))
     return games
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dry-run", action="store_true", help="nur Matching-Bericht, kein Download")
-    ap.add_argument("--system", choices=sorted(SYSTEMS), help="nur dieses System")
+    ap.add_argument("--system", choices=sorted(SYSTEMS) + [DOS_KEY], help="nur dieses System")
     ap.add_argument("--limit", type=int, help="max. Anzahl ROMs je System")
+    ap.add_argument("--refresh", action="store_true", help="vorhandene Cover neu laden und ueberschreiben")
+    ap.add_argument("--only", metavar="TEILSTRING", help="nur ROMs, deren Dateiname den Teilstring enthaelt")
     a = ap.parse_args()
 
     use_usb = os.path.isdir(USB)
@@ -246,29 +272,47 @@ def main():
         print(f"{SD} nicht gemountet.", file=sys.stderr)
         return 1
 
-    roms = scan_roms(base, dirs)
+    only = a.only.lower() if a.only else None
+    # Jobs: (key, [repos], stem, dateiname)
+    jobs = []
+    for key, repo, stem, fn in scan_roms(base, dirs):
+        jobs.append((key, [repo], stem, fn))
+    for sub, folder in scan_adventure(adv_base, adv):
+        jobs.append((DOS_KEY, ADV_REPOS.get(sub, ["DOS"]), folder, f"{sub}/{folder}"))
     indexes = {}
     stats = {}
     downloaded = skipped = failed = 0
     per_sys_count = {}
 
+    def index_for(repo):
+        if repo not in indexes:
+            print(f"Lade Namensliste {repo} ...")
+            indexes[repo] = Index(thumb_names(repo))
+        return indexes[repo]
+
     try:
-        for key, repo, stem, fn in roms:
+        for key, repos, stem, fn in jobs:
             if a.system and key != a.system:
+                continue
+            if only and only not in fn.lower():
                 continue
             if a.limit is not None and per_sys_count.get(key, 0) >= a.limit:
                 continue
             per_sys_count[key] = per_sys_count.get(key, 0) + 1
-            if repo not in indexes:
-                print(f"Lade Namensliste {repo} ...")
-                indexes[repo] = Index(thumb_names(repo))
             st = stats.setdefault(key, {"match": [], "miss": []})
             n = norm(stem)
-            name, ratio = indexes[repo].match(n)
-            if not name and key == "n64" and n.endswith("64") and len(n) > 6:
-                # Libretro fuehrt N64-Titel ohne "64"-Zusatz ("Quake 64" -> "Quake")
-                name, ratio = indexes[repo].match(n[:-2])
-                ratio = min(ratio, 0.99)
+            name, ratio, repo = None, 0.0, None
+            for repo in repos:
+                idx = index_for(repo)
+                name, ratio = idx.match(n)
+                if not name and key == "n64" and n.endswith("64") and len(n) > 6:
+                    # Libretro fuehrt N64-Titel ohne "64"-Zusatz ("Quake 64" -> "Quake")
+                    name, ratio = idx.match(n[:-2])
+                    ratio = min(ratio, 0.99)
+                if not name and key == DOS_KEY:
+                    name, ratio = idx.match_contains(n)
+                if name:
+                    break
             if not name:
                 st["miss"].append(stem)
                 continue
@@ -276,7 +320,7 @@ def main():
             if a.dry_run:
                 continue
             dest = os.path.join(SD, "launcher", "covers", key, stem + ".png")
-            if os.path.isfile(dest):
+            if os.path.isfile(dest) and not a.refresh:
                 skipped += 1
                 continue
             url = (f"https://raw.githubusercontent.com/{ORG}/{repo}/master/Named_Boxarts/"
@@ -306,7 +350,7 @@ def main():
         return 2
 
     print("\n== Bericht ==")
-    for key in SYSTEMS:
+    for key in list(SYSTEMS) + [DOS_KEY]:
         if key not in stats:
             continue
         st = stats[key]
@@ -323,11 +367,6 @@ def main():
             print(f"  {mark} {name}  <-  {len(stems)}x ({stems[0]}{' ...' if len(stems) > 1 else ''})")
         for m in st["miss"]:
             print(f"  - {m}")
-    games = scan_adventure(adv_base, adv)
-    if games:
-        print(f"\n[adventure] kein Cover (ScummVM/DOS): {len(games)} Spiele")
-        for g in games:
-            print(f"  . {g}")
     if not a.dry_run:
         print(f"\nHeruntergeladen {downloaded}, vorhanden {skipped}, Fehler {failed}")
     return 0
