@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app version="1">
+  <name>Launcher</name>
+  <coder>Matthias</coder>
+  <version>0.1.0</version>
+  <release_date>20261029000000</release_date>
+  <short_description>Startbildschirm</short_description>
+  <long_description>Startbildschirm fuer Wii, GameCube und Emulator-Spiele von der USB-Platte.</long_description>
+</app>

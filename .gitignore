@@ -4,3 +4,7 @@ build/
 *.dol
 *.elf
 *.map
+tests/run_tests
+*.o
+*.d
+launcher/launcher.dol
