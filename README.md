@@ -27,13 +27,14 @@ tools/wiiload.sh <Wii-IP>   # sendet launcher/launcher.dol, HBC muss laufen
 
 ## Cover
 
-`tools/covers-emu.py` lädt Boxart-Cover aus den Libretro-Thumbnails für N64, SNES, NES und Sega nach `/Volumes/WII/launcher/covers/<System>/<ROM-Name>.png`. Titel werden wie im Launcher normalisiert und per Name bzw. Ähnlichkeit (>= 0,85) zugeordnet.
+`tools/covers-emu.py` lädt Boxart-Cover aus den Libretro-Thumbnails für N64, SNES, NES, Sega und Adventure (ScummVM/DOSBox) nach `/Volumes/WII/launcher/covers/<System>/<ROM-Name>.png` (Adventure: `covers/dos/<Spielordner>.png`). Cover werden auf höchstens 320x228 verkleinert (Seitenverhältnis bleibt). Titel werden wie im Launcher normalisiert und per Name bzw. Ähnlichkeit (>= 0,85) zugeordnet.
 
 ```bash
 python3 -I tools/covers-emu.py --dry-run             # nur Trefferbericht
 python3 -I tools/covers-emu.py --system n64 --limit 20
+python3 -I tools/covers-emu.py --system dos --refresh --only "Monkey"   # vorhandene Cover neu laden, nur passende Namen
 ```
 
-Ohne `GITHUB_TOKEN` gilt das niedrige anonyme API-Limit; bei Bedarf `export GITHUB_TOKEN=$(gh auth token)`. ScummVM- und DOS-Spiele bekommen kein Cover.
+Ohne `GITHUB_TOKEN` gilt das niedrige anonyme API-Limit; bei Bedarf `export GITHUB_TOKEN=$(gh auth token)`. `--refresh` überschreibt vorhandene Cover, `--only "<Teilstring>"` beschränkt auf ROMs bzw. Spielordner mit diesem Namensteil. Bei Adventure-Ordnern (Kurznamen) trifft auch ein zusammenhängender Teil des Libretro-Namens; ScummVM-Ordner suchen zuerst im Repo ScummVM, dann in DOS, dosbox-Ordner nur in DOS.
 
 Die Cover unter `tools/dolphin-sd/` stammen von GameTDB und sind nur Testmaterial für den privaten Gebrauch; vor einer Veröffentlichung des Repos müssen sie durch eigene Bilder ersetzt werden.
