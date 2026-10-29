@@ -15,7 +15,10 @@
 namespace {
 
 constexpr size_t kTextureBudget = 24 * 1024 * 1024;
-const char kCoverPath[] = "sd:/config/images/2D/RMCP01.png";
+// RMCP01 laut Plan; tools/dolphin-sd enthält mangels RMCP01 im Backup RHAP01/RSPP01/RFNP01.
+const char* const kCoverPaths[] = {
+    "sd:/config/images/2D/RMCP01.png", "sd:/config/images/2D/RHAP01.png",
+    "sd:/config/images/2D/RSPP01.png", "sd:/config/images/2D/RFNP01.png"};
 const char kBrokenPath[] = "sd:/launcher/covers/wii/kaputt.png";
 
 }  // namespace
@@ -51,7 +54,10 @@ void runGfxDemo(WiiFs& fs) {
         gfx::text(40, 82, 14, 0x9CA3AFFF, info);
 
         // Cover 160x224 (Seitenverhältnis der 2D-Cover)
-        const Texture* cover = cache.get(kCoverPath);
+        // Fehlschläge merkt sich der Cache, die Suche kostet also nur im ersten Bild.
+        const Texture* cover = nullptr;
+        for (const char* path : kCoverPaths)
+            if ((cover = cache.get(path)) != nullptr) break;
         if (cover) {
             gfx::image(*cover, 40, 120, 160, 224, 1.0f);
         } else {

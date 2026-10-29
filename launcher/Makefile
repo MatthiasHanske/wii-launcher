@@ -104,6 +104,9 @@ export OUTPUT	:=	$(CURDIR)/$(TARGET)
 #---------------------------------------------------------------------------------
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
+	@# main.o verwerfen, wenn LAUNCHER_GFX_DEMO seit dem letzten Build gewechselt hat
+	@flag=$(if $(strip $(LAUNCHER_GFX_DEMO)),1,0); \
+	[ "`cat $@/gfx_demo.stamp 2>/dev/null`" = "$$flag" ] || { rm -f $@/main.o; echo $$flag > $@/gfx_demo.stamp; }
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 #---------------------------------------------------------------------------------
@@ -157,13 +160,6 @@ $(OFILES_SOURCES) : $(HFILES)
 #---------------------------------------------------------------------------------
 	@echo $(notdir $<)
 	$(bin2o)
-
-#---------------------------------------------------------------------------------
-# main.o neu bauen, wenn LAUNCHER_GFX_DEMO zwischen zwei Builds wechselt
-#---------------------------------------------------------------------------------
-# (main.o direkt löschen statt Zeitstempel vergleichen: make 3.81 rechnet in Sekunden)
-GFX_DEMO_FLAG := $(if $(strip $(LAUNCHER_GFX_DEMO)),1,0)
-$(shell [ "`cat gfx_demo.stamp 2>/dev/null`" = "$(GFX_DEMO_FLAG)" ] || { rm -f main.o; echo $(GFX_DEMO_FLAG) > gfx_demo.stamp; })
 
 -include $(DEPENDS)
 
