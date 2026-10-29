@@ -119,7 +119,7 @@ TEST(ui_list_a_launches_selected) {
     CHECK(carouselGame(s, kNoRecent, lib) == lib.visible()[3]);
 }
 
-TEST(ui_list_up_on_first_row_goes_to_tabs) {
+TEST(ui_list_up_at_index_zero_goes_to_tabs) {
     Library lib(uiFixture());
     UiState s;
     s.focus = Focus::List;
@@ -129,10 +129,21 @@ TEST(ui_list_up_on_first_row_goes_to_tabs) {
     CHECK_EQ(s.listIndex, 0);
     press(s, lib, kNoRecent, Action::Up);
     CHECK(s.focus == Focus::Tabs);
-    // Auch auf Seite 2, Zeile 0
+}
+
+TEST(ui_list_up_on_first_row_of_page_goes_to_previous_page) {
+    Library lib(uiFixture());  // 17 Spiele -> Seiten 10 + 7
+    UiState s;
     s.focus = Focus::List;
     press(s, lib, kNoRecent, Action::Two);
     CHECK_EQ(s.listIndex, 10);
+    press(s, lib, kNoRecent, Action::Up);  // Seite 2, Zeile 0 -> Seite 1, Zeile 9
+    CHECK(s.focus == Focus::List);
+    CHECK_EQ(s.listIndex, 9);
+    CHECK(s.carouselPreview == lib.visible()[9]);
+    for (int i = 0; i < 9; ++i) press(s, lib, kNoRecent, Action::Up);
+    CHECK_EQ(s.listIndex, 0);
+    CHECK(s.focus == Focus::List);
     press(s, lib, kNoRecent, Action::Up);
     CHECK(s.focus == Focus::Tabs);
 }

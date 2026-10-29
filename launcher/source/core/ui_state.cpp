@@ -309,8 +309,8 @@ Command applyMain(UiState& s, Library& lib, const std::vector<const Game*>& rece
         case Focus::List: {
             int n = visibleCount(lib);
             switch (a) {
-                case Action::Up:
-                    if (s.listIndex % Library::kPageSize == 0) s.focus = Focus::Tabs;
+                case Action::Up:  // erste Zeile einer Seite -> vorige Seite, letzte Zeile
+                    if (s.listIndex == 0) s.focus = Focus::Tabs;
                     else selectList(s, lib, s.listIndex - 1);
                     break;
                 case Action::Down:  // letzte Zeile einer Seite -> naechste Seite, Zeile 0
