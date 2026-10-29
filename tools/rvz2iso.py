@@ -368,9 +368,9 @@ def convert(src, dst, quiet=False):
                   f"zero {st.zero_groups}, packed {st.packed_groups}); segments data "
                   f"{st.data_segments}, junk {st.junk_segments} ({st.junk_bytes} bytes); "
                   f"largest segment {st.max_segment} <= chunk {r.chunk_size}", file=sys.stderr)
-            if dhead_mismatch:
-                print("warning: group data differs from header dhead in the first 0x80 "
-                      "bytes; header copy was used", file=sys.stderr)
+        if dhead_mismatch:
+            print("warning: group data differs from header dhead in the first 0x80 "
+                  "bytes; header copy was used", file=sys.stderr)
         return result
     finally:
         r.close()
