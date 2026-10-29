@@ -29,8 +29,8 @@ constexpr float kSplit = 0.52f;              // Anteil der linken Spalte an der 
 
 // Vorschau: Cover werden per fitRect in Spaltenbreite x kCenterH eingepasst (hochkant
 // 160x224 wie die Wii/GC-Cover, quer bis zur vollen Spaltenbreite). kCenterW x kCenterH ist
-// das Standardformat der Platzhalter-Kachel. Darunter Titel (ab y 352) und Systemzeile
-// (bis etwa y 400); die Tastenhinweise beginnen bei kBottom - 18 = 430.
+// das Standardformat der Platzhalter-Kachel. Darunter Titel (ab y 350) und Systemzeile
+// (bis etwa y 398); die Tastenhinweise beginnen bei kBottom - 18 = 430.
 constexpr float kCenterW = 160, kCenterH = 224;
 constexpr float kSideW = 88, kSideH = 123;   // Rahmen der Seitencover (Cover darin eingepasst)
 constexpr float kCarouselTop = 112;
