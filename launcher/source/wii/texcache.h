@@ -17,6 +17,11 @@
 #include "core/lru.h"
 #include "wii/gfx.h"
 
+// PNG aus dem Speicher dekodieren (z. B. eingebettete Logos), wie TexCache: ohne das memset
+// von GRRLIB_LoadTexturePNG, Auffüllränder mit dem letzten echten Pixel gefüllt. Freigeben mit
+// GRRLIB_FreeTexture(out.img).
+bool loadPngTexture(const uint8_t* data, size_t size, Texture& out);
+
 class TexCache {
 public:
     explicit TexCache(size_t maxBytes);
@@ -27,6 +32,11 @@ public:
     // nullptr, wenn die Datei fehlt, keine gültige PNG ist oder nicht dekodiert werden
     // kann. Fehlschläge werden gemerkt (kein erneuter Kartenzugriff in jedem Bild).
     const Texture* get(const std::string& path);
+
+    // Liegt path geladen im Cache (get() kostet dann keinen Kartenzugriff)?
+    bool contains(const std::string& path) const { return entries_.count(path) != 0; }
+    // Ist path als nicht ladbar gemerkt (get() liefert sofort nullptr)?
+    bool failed(const std::string& path) const { return failed_.count(path) != 0; }
 
     // Nach endFrame() aufrufen: verdrängt die ältesten Einträge, bis das Budget passt,
     // und beginnt ein neues Bild.
