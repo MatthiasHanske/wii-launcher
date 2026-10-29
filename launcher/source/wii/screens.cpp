@@ -27,8 +27,12 @@ constexpr float kPillH = 28;
 constexpr float kSearchW = 150;
 constexpr float kSplit = 0.52f;              // Anteil der linken Spalte an der Inhaltsbreite
 
-constexpr float kCenterW = 140, kCenterH = 196;
-constexpr float kSideW = 78, kSideH = 109;
+// Vorschau: Cover werden per fitRect in Spaltenbreite x kCenterH eingepasst (hochkant
+// 160x224 wie die Wii/GC-Cover, quer bis zur vollen Spaltenbreite). kCenterW x kCenterH ist
+// das Standardformat der Platzhalter-Kachel. Darunter Titel (ab y 350) und Systemzeile
+// (bis etwa y 398); die Tastenhinweise beginnen bei kBottom - 18 = 430.
+constexpr float kCenterW = 160, kCenterH = 224;
+constexpr float kSideW = 88, kSideH = 123;   // Rahmen der Seitencover (Cover darin eingepasst)
 constexpr float kCarouselTop = 112;
 constexpr float kSlidePx = 36;               // Gleitweg des Karussells
 
@@ -161,16 +165,24 @@ void drawBar(const TopBarLayout& b, const UiState& s, const Hit& hover) {
 
 // --- Cover ---------------------------------------------------------------------------------
 
-void drawCover(Covers& covers, const Game& g, const Rect& r, bool mini, float alpha = 1) {
+// Cover unverzerrt und zentriert in r einpassen; ohne Cover (noch ladend oder keins) füllt die
+// Kachel r. Liefert die tatsächlich bemalte Fläche.
+Rect drawCover(Covers& covers, const Game& g, const Rect& r, bool mini, float alpha = 1) {
     bool pending = false;
     const Texture* tex = covers.cover(g, pending);
     if (tex) {
-        gfx::image(*tex, r.x, r.y, r.w, r.h, alpha);
-    } else if (pending) {
+        Rect f = fitRect(static_cast<float>(tex->w), static_cast<float>(tex->h), r);
+        if (!f.empty()) {
+            gfx::image(*tex, f.x, f.y, f.w, f.h, alpha);
+            return f;
+        }
+    }
+    if (pending) {
         gfx::gradientRect(r.x, r.y, r.w, r.h, withAlpha(0x1F2937FF, alpha), withAlpha(0x111827FF, alpha));
     } else {
         gfx::placeholder(r.x, r.y, r.w, r.h, covers.logo(g.system), mini ? std::string() : g.title);
     }
+    return r;
 }
 
 // Nachbarn des Karussells (links/rechts von carouselIndex), nullptr wenn keiner.
@@ -214,6 +226,11 @@ const Texture* Covers::logo(System s) const {
     return t.img ? &t : nullptr;
 }
 
+const Texture* Covers::peek(const Game& g) const {
+    std::string path = coverPath(g);
+    return path.empty() ? nullptr : cache_.peek(path);
+}
+
 const Texture* Covers::cover(const Game& g, bool& pending) {
     pending = false;
     std::string path = coverPath(g);
@@ -241,7 +258,7 @@ void Covers::clear() { cache_.clear(); }
 
 // --- Layouts -------------------------------------------------------------------------------
 
-MainLayout mainLayout(const UiState& s, const Library& lib) {
+MainLayout mainLayout(const UiState& s, const Library& lib, float centerImgW, float centerImgH) {
     MainLayout m;
     m.bar = barLayout(lib);
 
@@ -251,16 +268,16 @@ MainLayout mainLayout(const UiState& s, const Library& lib) {
     m.leftW = m.splitX - 14 - kSafe;
     m.labelY = 88;
 
-    const float cx = std::round(m.leftX + m.leftW / 2);
-    m.carCenter = Rect{cx - kCenterW / 2, kCarouselTop, kCenterW, kCenterH};
-    // Bei 640 px überlappen die Seitencover die Mitte um ein paar Pixel (liegen dahinter).
-    float gap = std::clamp((m.leftW - kCenterW - 2 * kSideW) / 2, -8.0f, 14.0f);
-    float sideY = kCarouselTop + (kCenterH - kSideH) / 2;
-    m.carLeft = Rect{m.carCenter.x - gap - kSideW, sideY, kSideW, kSideH};
-    m.carRight = Rect{m.carCenter.x + kCenterW + gap, sideY, kSideW, kSideH};
-    m.hitLeft = Rect{m.leftX, kCarouselTop, m.carCenter.x - m.leftX, kCenterH};
-    float rightStart = m.carCenter.x + kCenterW;
-    m.hitRight = Rect{rightStart, kCarouselTop, m.leftX + m.leftW - rightStart, kCenterH};
+    m.carArea = Rect{m.leftX, kCarouselTop, m.leftW, kCenterH};
+    m.carCenter = fitRect(centerImgW, centerImgH, m.carArea);
+    if (m.carCenter.empty()) m.carCenter = fitRect(kCenterW, kCenterH, m.carArea);  // Standardformat
+    // Seitencover neben der tatsächlichen Mitte; ist außen kein Platz, rücken sie hinter die
+    // Mitte (bei 640 px schon im Hochformat) oder entfallen bei sehr breiten Covern.
+    CarouselGeometry car = carouselGeometry(m.carArea, m.carCenter, kSideW, kSideH);
+    m.carLeft = car.left;
+    m.carRight = car.right;
+    m.hitLeft = car.hitLeft;
+    m.hitRight = car.hitRight;
     m.titleY = kCarouselTop + kCenterH + 14;
     m.systemY = m.titleY + 30;
     m.hintsY = kBottom - 18;
@@ -348,7 +365,8 @@ NoUsbLayout noUsbLayout() {
 
 // --- Hit-Test ------------------------------------------------------------------------------
 
-Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::vector<const Game*>& recent) {
+Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::vector<const Game*>& recent,
+            const Covers* covers) {
     const auto none = std::make_pair(static_cast<int>(Region::None), 0);
     auto hit = [](Region r, int i) { return Hit(std::make_pair(static_cast<int>(r), i)); };
 
@@ -384,7 +402,10 @@ Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::v
         return none;
     }
 
-    MainLayout m = mainLayout(s, lib);
+    const Game* center = carouselGame(s, recent, lib);
+    const Texture* centerTex = (covers && center) ? covers->peek(*center) : nullptr;
+    MainLayout m = centerTex ? mainLayout(s, lib, static_cast<float>(centerTex->w), static_cast<float>(centerTex->h))
+                             : mainLayout(s, lib);
     for (size_t i = 0; i < m.bar.tabs.size(); ++i)
         if (m.bar.tabs[i].contains(x, y)) return hit(Region::Tab, static_cast<int>(i));
     if (m.bar.search.contains(x, y)) return hit(Region::SearchField, 0);
@@ -404,26 +425,33 @@ Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::v
 
 void drawMain(const UiState& s, const Library& lib, const std::vector<const Game*>& recent, Covers& covers,
               const Hit& hover, float slide) {
-    MainLayout m = mainLayout(s, lib);
+    // Das Mittelcover bestimmt die Geometrie des Karussells, deshalb zuerst holen (zählt zum
+    // Ladebudget dieses Bilds; drawCover trifft danach den Cache).
+    const Game* center = carouselGame(s, recent, lib);
+    bool centerPending = false;
+    const Texture* centerTex = center ? covers.cover(*center, centerPending) : nullptr;
+    MainLayout m = centerTex ? mainLayout(s, lib, static_cast<float>(centerTex->w), static_cast<float>(centerTex->h))
+                             : mainLayout(s, lib);
     drawBar(m.bar, s, hover);
 
     // Linke Spalte: Karussell
     if (!recent.empty()) gfx::text(m.leftX, m.labelY, kSizeSmall, kMuted, "Zuletzt gespielt");
 
-    const Game* center = carouselGame(s, recent, lib);
     const Game *left = nullptr, *right = nullptr;
     carouselSides(s, lib, recent, left, right);
+    // Gleiten: alles um dx versetzt, aber nie über die linke Spalte hinaus (breite Cover
+    // gleiten entsprechend kürzer, das Ausblenden der Mitte bleibt).
     const float dx = std::round(slide * kSlidePx);
-    auto shifted = [dx](Rect r) { r.x += dx; return r; };
+    const float colL = m.carArea.x, colR = m.carArea.x + m.carArea.w;
+    auto shifted = [dx, colL, colR](const Rect& r) { return slideWithin(r, dx, colL, colR); };
 
     const Game* sides[2] = {left, right};
     const Rect sideRects[2] = {shifted(m.carLeft), shifted(m.carRight)};
     const Region sideRegions[2] = {Region::CarouselLeft, Region::CarouselRight};
     for (int i = 0; i < 2; ++i) {
-        if (!sides[i]) continue;
-        drawCover(covers, *sides[i], sideRects[i], false);
+        if (!sides[i] || sideRects[i].empty()) continue;
+        Rect r = drawCover(covers, *sides[i], sideRects[i], false);
         bool hovered = hitIs(hover, sideRegions[i]) && s.overlay == Overlay::None;
-        const Rect& r = sideRects[i];
         gfx::rect(r.x, r.y, r.w, r.h, hovered ? 0x00000040 : 0x00000080);  // abgedunkelt
     }
     if (center) {

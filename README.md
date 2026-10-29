@@ -35,6 +35,8 @@ python3 -I tools/covers-emu.py --system n64 --limit 20
 python3 -I tools/covers-emu.py --system dos --refresh --only "Monkey"   # vorhandene Cover neu laden, nur passende Namen
 ```
 
+Cover-Größen: Wii/GameCube nutzen die 2D-Cover von USB Loader GX (160x224), Emulator-Cover liegen mit erhaltenem Seitenverhältnis bei höchstens 320x228; der Launcher passt alle unverzerrt ein (Vorschau bis Spaltenbreite x 224).
+
 Ohne `GITHUB_TOKEN` gilt das niedrige anonyme API-Limit; bei Bedarf `export GITHUB_TOKEN=$(gh auth token)`. `--refresh` überschreibt vorhandene Cover, `--only "<Teilstring>"` beschränkt auf ROMs bzw. Spielordner mit diesem Namensteil. Bei Adventure-Ordnern (Kurznamen) trifft auch ein zusammenhängender Teil des Libretro-Namens; ScummVM-Ordner suchen zuerst im Repo ScummVM, dann in DOS, dosbox-Ordner nur in DOS.
 
 Die Cover unter `tools/dolphin-sd/` stammen von GameTDB und sind nur Testmaterial für den privaten Gebrauch; vor einer Veröffentlichung des Repos müssen sie durch eigene Bilder ersetzt werden.
