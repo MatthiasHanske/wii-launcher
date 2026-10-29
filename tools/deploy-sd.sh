@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 # Kopiert Launcher und Forwarder auf die SD-Karte (/Volumes/WII).
-# Aufruf: tools/deploy-sd.sh [--dry-run]
+# Aufruf: tools/deploy-sd.sh [--dry-run] [--force-tpl]
+#   --force-tpl ueberschreibt eine vorhandene launcher/dosbox.conf.tpl
 set -euo pipefail
 
 SD="${WII_SD:-/Volumes/WII}"
 USB="${WII_USB:-/Volumes/WII-ROMS}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DRY=0
+FORCE_TPL=0
 
-case "${1:-}" in
-  "") ;;
-  --dry-run) DRY=1 ;;
-  *) echo "Aufruf: $0 [--dry-run]" >&2; exit 1 ;;
-esac
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY=1 ;;
+    --force-tpl) FORCE_TPL=1 ;;
+    *) echo "Aufruf: $0 [--dry-run] [--force-tpl]" >&2; exit 1 ;;
+  esac
+done
 
-if ! mount | grep -q " on ${SD} "; then
+if ! { [ -d "$SD" ] && df "$SD" >/dev/null 2>&1 && mount | grep -F " on ${SD} " >/dev/null; }; then
   if [ "$DRY" = 1 ]; then
     echo "Hinweis: $SD ist nicht gemountet (dry-run laeuft trotzdem)." >&2
   else
@@ -57,7 +61,9 @@ fi
 
 # dosbox.conf.tpl: Kopie der DOSBox-Wii-Konfiguration, sonst Minimalvorlage
 SRC_CONF="$SD/apps/dosbox-wii/dosbox.conf"
-if [ -f "$SRC_CONF" ]; then
+if [ -f "$LDIR/dosbox.conf.tpl" ] && [ "$FORCE_TPL" = 0 ]; then
+  note "belassen launcher/dosbox.conf.tpl (vorhanden, --force-tpl zum Ueberschreiben)"
+elif [ -f "$SRC_CONF" ]; then
   run cp "$SRC_CONF" "$LDIR/dosbox.conf.tpl"; note "kopiert  launcher/dosbox.conf.tpl (aus dosbox-wii)"
 elif [ "$DRY" = 1 ]; then
   echo "[dry-run] dosbox.conf.tpl aus Minimalvorlage"; note "angelegt launcher/dosbox.conf.tpl (Minimalvorlage, dry-run)"

@@ -106,8 +106,10 @@ def thumb_names(repo):
         print(f"  API-Liste fuer {repo} fehlgeschlagen ({e}), versuche Unterbaum ...", file=sys.stderr)
         data = api_json(f"https://api.github.com/repos/{ORG}/{repo}/git/trees/master:Named_Boxarts")
         names = [e["path"][:-4] for e in data["tree"] if e["path"].endswith(".png")]
-    with open(cache, "w") as f:
-        json.dump(names, f)
+    if names:
+        with open(cache + ".tmp", "w") as f:
+            json.dump(names, f)
+        os.replace(cache + ".tmp", cache)
     return names
 
 
@@ -117,6 +119,12 @@ def region_rank(name):
         if tag in n:
             return i
     return 9
+
+
+def suffix(k):
+    """Abschliessende Zahl bzw. roemische Ziffer (Fortsetzungsnummer), sonst ''."""
+    m = re.search(r"(\d+|(?:x{0,2}(?:ix|iv|v?i{0,3})))$", k)
+    return m.group(1) if m and m.group(1) else ""
 
 
 class Index:
@@ -137,6 +145,8 @@ class Index:
                 continue
             sm = difflib.SequenceMatcher(None, title_norm, k)
             if sm.real_quick_ratio() < THRESHOLD or sm.quick_ratio() < THRESHOLD:
+                continue
+            if suffix(k) != suffix(title_norm):  # II vs III, 2 vs 3
                 continue
             r = sm.ratio()
             if r > ratio:
@@ -219,7 +229,9 @@ def main():
             n = norm(stem)
             name, ratio = indexes[repo].match(n)
             if not name and key == "n64" and n.endswith("64") and len(n) > 6:
-                name, ratio = indexes[repo].match(n[:-2])  # "Quake 64" -> "Quake"
+                # Libretro fuehrt N64-Titel ohne "64"-Zusatz ("Quake 64" -> "Quake")
+                name, ratio = indexes[repo].match(n[:-2])
+                ratio = min(ratio, 0.99)
             if not name:
                 st["miss"].append(stem)
                 continue
@@ -234,15 +246,25 @@ def main():
                    + urllib.parse.quote(name) + ".png")
             try:
                 data = http_get(url)
+                if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+                    raise ValueError("keine PNG-Datei")
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
-                with open(dest, "wb") as f:
+                with open(dest + ".tmp", "wb") as f:
                     f.write(data)
+                os.replace(dest + ".tmp", dest)
                 downloaded += 1
             except Exception as e:
                 failed += 1
                 st["miss"].append(f"{stem} (Download: {e})")
     except RateLimit as e:
         print(str(e), file=sys.stderr)
+        return 2
+    except urllib.error.HTTPError as e:
+        hint = " (vermutlich Rate-Limit, GITHUB_TOKEN setzen)" if e.code == 403 else ""
+        print(f"HTTP-Fehler {e.code}{hint}: {e.url}", file=sys.stderr)
+        return 2
+    except urllib.error.URLError as e:
+        print(f"Netzwerkfehler: {e.reason}", file=sys.stderr)
         return 2
 
     print("\n== Bericht ==")
@@ -252,11 +274,15 @@ def main():
         st = stats[key]
         total = len(st["match"]) + len(st["miss"])
         titles = {}
+        fuzzy = {}
         for stem, name, r in st["match"]:
             titles.setdefault(name, []).append(stem)
+            if r < 1.0:
+                fuzzy[name] = True
         print(f"\n[{key}] Treffer {len(st['match'])}/{total}, fehlend {len(st['miss'])}")
         for name, stems in titles.items():
-            print(f"  + {name}  <-  {len(stems)}x ({stems[0]}{' ...' if len(stems) > 1 else ''})")
+            mark = "~" if fuzzy.get(name) else "+"
+            print(f"  {mark} {name}  <-  {len(stems)}x ({stems[0]}{' ...' if len(stems) > 1 else ''})")
         for m in st["miss"]:
             print(f"  - {m}")
     games = scan_adventure(adv_base, adv)

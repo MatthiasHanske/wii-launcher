@@ -13,6 +13,7 @@ DOL="$ROOT/launcher/launcher.dol"
 WIILOAD_BIN="${WIILOAD_BIN:-/opt/devkitpro/tools/bin/wiiload}"
 
 [ -f "$DOL" ] || { echo "Fehlt: $DOL (erst 'make launcher')" >&2; exit 1; }
-[ -x "$WIILOAD_BIN" ] || { echo "wiiload nicht gefunden: $WIILOAD_BIN" >&2; exit 1; }
+[ -x "$WIILOAD_BIN" ] || WIILOAD_BIN="$(command -v wiiload || true)"
+[ -n "$WIILOAD_BIN" ] && [ -x "$WIILOAD_BIN" ] || { echo "wiiload nicht gefunden: $WIILOAD_BIN" >&2; exit 1; }
 
 WIILOAD="tcp:$1" "$WIILOAD_BIN" "$DOL"

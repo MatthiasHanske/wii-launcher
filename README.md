@@ -7,13 +7,13 @@ Bauen braucht devkitPro (devkitPPC, GRRLIB, libfat; siehe `docs/toolchain.md`). 
 ## Bauen
 
 ```bash
-make            # launcher/launcher.dol und forwarder/forwarder.dol
+make            # launcher/launcher.dol, forwarder/forwarder.dol und booter
 make test       # Host-Tests der Core-Logik
 ```
 
 ## Deploy
 
-`tools/deploy-sd.sh` kopiert den Launcher nach `/Volumes/WII/apps/launcher/` (`boot.dol`, `meta.xml`, `icon.png`), den Forwarder nach `/Volumes/WII/forwarder.dol` und legt bei Bedarf `/Volumes/WII/launcher/settings.txt` und `dosbox.conf.tpl` an (vorhandene Einstellungen bleiben unberührt). Ist `/Volumes/WII-ROMS` gemountet, entsteht außerdem `dosbox/SimCity 2000/autoexec.txt`. `._*`-Dateien werden entfernt, die SD wird nicht ausgeworfen. Mit `--dry-run` wird nur angezeigt, was passieren würde.
+`tools/deploy-sd.sh` kopiert den Launcher nach `/Volumes/WII/apps/launcher/` (`boot.dol`, `meta.xml`, `icon.png`), den Forwarder nach `/Volumes/WII/forwarder.dol` und legt bei Bedarf `/Volumes/WII/launcher/settings.txt` und `dosbox.conf.tpl` an (vorhandene Dateien bleiben unberührt, `--force-tpl` überschreibt `dosbox.conf.tpl`). Ist die USB-Platte `/Volumes/WII-ROMS` gemountet, entsteht außerdem `dosbox/SimCity 2000/autoexec.txt`. `._*`-Dateien werden entfernt, die SD wird nicht ausgeworfen. Mit `--dry-run` wird nur angezeigt, was passieren würde.
 
 Priiloader-Autostart einrichten: `docs/priiloader.md`. Toolchain: `docs/toolchain.md`. Testergebnisse: `docs/testprotokoll.md`.
 
