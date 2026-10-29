@@ -33,6 +33,13 @@ ifneq ($(strip $(LAUNCHER_GFX_DEMO)),)
 CXXFLAGS	+=	-DLAUNCHER_GFX_DEMO
 endif
 
+# Build-ID für das Diagnose-Log (wii/log.cpp): git short hash, sonst "dev".
+BUILD_ID	:=	$(shell git rev-parse --short HEAD 2>/dev/null)
+ifeq ($(strip $(BUILD_ID)),)
+BUILD_ID	:=	dev
+endif
+CXXFLAGS	+=	-DBUILD_ID=\"$(BUILD_ID)\"
+
 LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map
 
 #---------------------------------------------------------------------------------
@@ -109,6 +116,8 @@ $(BUILD):
 	@# (auch .elf/.dol: make 3.81 auf macOS vergleicht nur ganze Sekunden)
 	@flag=$(if $(strip $(LAUNCHER_GFX_DEMO)),1,0); \
 	[ "`cat $@/gfx_demo.stamp 2>/dev/null`" = "$$flag" ] || { rm -f $@/main.o $(OUTPUT).elf $(OUTPUT).dol; echo $$flag > $@/gfx_demo.stamp; }
+	@# log.o neu bauen, wenn sich die Build-ID (git HEAD) geändert hat
+	@[ "`cat $@/build_id.stamp 2>/dev/null`" = "$(BUILD_ID)" ] || { rm -f $@/log.o $(OUTPUT).elf $(OUTPUT).dol; echo $(BUILD_ID) > $@/build_id.stamp; }
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 #---------------------------------------------------------------------------------
