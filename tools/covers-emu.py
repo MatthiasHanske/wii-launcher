@@ -9,6 +9,8 @@ import difflib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -20,6 +22,9 @@ BACKUP = "/Users/matthias/Backups/WII-SD-2026-10-28"
 CACHE = os.path.expanduser("~/.cache/wii-launcher-covers")
 ORG = "libretro-thumbnails"
 THRESHOLD = 0.85
+# Groesse der 2D-Cover von USB Loader GX; groessere Bilder kosten auf der Wii nur Speicher.
+MAX_W, MAX_H = 160, 228
+_warned_resize = False
 
 # systemKey -> Liste von (Repo, Endungen)
 SYSTEMS = {
@@ -111,6 +116,38 @@ def thumb_names(repo):
             json.dump(names, f)
         os.replace(cache + ".tmp", cache)
     return names
+
+
+def downscale(path):
+    """Bild auf hoechstens MAX_W x MAX_H verkleinern (Seitenverhaeltnis bleibt).
+    PIL, sonst sips (macOS), sonst unveraendert mit Warnung."""
+    global _warned_resize
+    try:
+        from PIL import Image
+        with Image.open(path) as im:
+            if im.width <= MAX_W and im.height <= MAX_H:
+                return
+            im.thumbnail((MAX_W, MAX_H), Image.LANCZOS)
+            im.save(path, "PNG")
+        return
+    except ImportError:
+        pass
+    if shutil.which("sips"):
+        out = subprocess.run(["sips", "-g", "pixelWidth", "-g", "pixelHeight", path],
+                             capture_output=True, text=True).stdout
+        w = int(re.search(r"pixelWidth: (\d+)", out).group(1))
+        h = int(re.search(r"pixelHeight: (\d+)", out).group(1))
+        if w <= MAX_W and h <= MAX_H:
+            return
+        # sips -Z begrenzt die laengere Seite; so waehlen, dass beide Grenzen halten
+        z = min(MAX_H if h >= w else MAX_W, int(max(w, h) * min(MAX_W / w, MAX_H / h)))
+        subprocess.run(["sips", "-s", "format", "png", "-Z", str(z), path, "--out", path],
+                       check=True, capture_output=True)
+        return
+    if not _warned_resize:
+        print("Warnung: weder PIL noch sips vorhanden, Cover bleiben in Originalgroesse.",
+              file=sys.stderr)
+        _warned_resize = True
 
 
 def region_rank(name):
@@ -251,6 +288,7 @@ def main():
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 with open(dest + ".tmp", "wb") as f:
                     f.write(data)
+                downscale(dest + ".tmp")
                 os.replace(dest + ".tmp", dest)
                 downloaded += 1
             except Exception as e:
