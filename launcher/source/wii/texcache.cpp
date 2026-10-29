@@ -1,8 +1,10 @@
 #include "wii/texcache.h"
 
 #include <grrlib.h>
+#include <pngu.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 #include "core/png_check.h"
@@ -28,6 +30,35 @@ bool readFile(const std::string& path, std::vector<uint8_t>& out) {
 }
 
 size_t textureBytes(uint32_t w, uint32_t h) { return size_t(w) * size_t(h) * 4; }  // RGBA8
+
+// Wie GRRLIB_LoadTexturePNG, aber ohne dessen memset: GRRLIB löscht die ganze Textur, wenn
+// PNGU auf Vielfache von 4 auffüllen musste (z. B. 2D-Cover 160x225 -> 160x228), das Cover
+// wäre dann komplett durchsichtig. Die Auffüllzeilen zeichnet gfx::image ohnehin nicht.
+GRRLIB_texImg* decodePng(const uint8_t* data) {
+    IMGCTX ctx = PNGU_SelectImageFromBuffer(data);
+    if (!ctx) return nullptr;
+    GRRLIB_texImg* img = nullptr;
+    PNGUPROP prop;
+    if (PNGU_GetImageProperties(ctx, &prop) == PNGU_OK) {
+        int w = 0, h = 0;
+        uint8_t* pixels = PNGU_DecodeTo4x4RGBA8(ctx, prop.imgWidth, prop.imgHeight, &w, &h);
+        if (pixels) {
+            img = static_cast<GRRLIB_texImg*>(std::calloc(1, sizeof(GRRLIB_texImg)));
+            if (!img) {
+                std::free(pixels);
+            } else {
+                img->data = pixels;
+                img->w = static_cast<u32>(w);
+                img->h = static_cast<u32>(h);
+                img->format = GX_TF_RGBA8;
+                GRRLIB_SetHandle(img, 0, 0);
+                GRRLIB_FlushTex(img);
+            }
+        }
+    }
+    PNGU_ReleaseImageContext(ctx);
+    return img;
+}
 
 }  // namespace
 
@@ -56,8 +87,7 @@ const Texture* TexCache::get(const std::string& path) {
     while (lru_.totalBytes() + bytes > maxBytes_ && evictOldestUnused()) {
     }
 
-    GRRLIB_texImg* img = GRRLIB_LoadTexturePNG(data.data());
-    // GRRLIB liefert auch bei Dekodierfehler ein Objekt, dann mit data == NULL.
+    GRRLIB_texImg* img = decodePng(data.data());
     if (!img || !img->data || img->w == 0 || img->h == 0) {
         if (img) GRRLIB_FreeTexture(img);
         failed_.insert(path);
