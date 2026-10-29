@@ -6,7 +6,7 @@ an Einsprungadresse + 8 und springt hinein.
 
 - Herkunft: `resources/app_booter` aus WiiFlow Lite, https://github.com/Fledge68/WiiFlow_Lite
 - Autor: Dimok (2011); `crt0.s`, `sync.c`, `link.ld` von Segher Boessenkool (2008-2009)
-- Lizenz: GNU GPL, Version 2 (siehe `readme.txt`, `WIIFLOW_LICENSE`,
+- Lizenz: GNU GPL, Version 2 (siehe `readme.txt`,
   http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt)
 
 Änderungen gegenüber dem Original:
