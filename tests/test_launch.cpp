@@ -148,7 +148,7 @@ TEST(launch_dosbox_simcity_without_autoexec) {
     CHECK_EQ(p.filesToWrite.size(), (size_t)1);
     CHECK_EQ(first(p).first, "sd:/apps/dosbox-wii/dosbox.conf");
     CHECK_EQ(first(p).second,
-             "[sdl]\nfullscreen=true\n[autoexec]\nmount c usb:/dosbox\nc:\ncd \"SimCity 2000\"\nSC2000.EXE\n");
+             "[sdl]\nfullscreen=true\n[autoexec]\nmount c \"usb:/dosbox/SimCity 2000\"\nc:\nSC2000.EXE\n");
     CHECK(!fs.exists("sd:/apps/dosbox-wii/dosbox.conf"));
 }
 
@@ -160,7 +160,7 @@ TEST(launch_dosbox_simcity_with_autoexec) {
     LaunchPlan p = makeLaunchPlan(mkGame(System::Adventure, "usb:/dosbox/SimCity 2000"), fs);
     CHECK_EQ(p.filesToWrite.size(), (size_t)1);
     CHECK_EQ(first(p).second,
-             "[cpu]\ncore=dynamic\n[autoexec]\nmount c usb:/dosbox\nc:\ncd \"SimCity 2000\"\nSC2VESA.BAT\n");
+             "[cpu]\ncore=dynamic\n[autoexec]\nmount c \"usb:/dosbox/SimCity 2000\"\nc:\nSC2VESA.BAT\n");
 }
 
 TEST(launch_dosbox_template_with_empty_autoexec) {
@@ -171,7 +171,7 @@ TEST(launch_dosbox_template_with_empty_autoexec) {
     CHECK_EQ(p.filesToWrite.size(), (size_t)1);
     std::string c = first(p).second;
     CHECK_EQ(countOf(c, "[autoexec]"), (size_t)1);
-    CHECK_EQ(c, "[sdl]\nfullscreen=true\n\n[cpu]\ncore=dynamic\n[autoexec]\nmount c usb:/dosbox\nc:\ncd \"Doom\"\nDOOM.EXE\n");
+    CHECK_EQ(c, "[sdl]\nfullscreen=true\n\n[cpu]\ncore=dynamic\n[autoexec]\nmount c \"usb:/dosbox/Doom\"\nc:\nDOOM.EXE\n");
 }
 
 TEST(launch_dosbox_template_autoexec_with_old_commands_removed) {
@@ -181,7 +181,7 @@ TEST(launch_dosbox_template_autoexec_with_old_commands_removed) {
     LaunchPlan p = makeLaunchPlan(mkGame(System::Adventure, "usb:/dosbox/Leer"), fs);
     CHECK_EQ(p.filesToWrite.size(), (size_t)1);
     // Kein Startbefehl gefunden: nur cd, DOSBox-Prompt.
-    CHECK_EQ(first(p).second, "[sdl]\nfullscreen=true\n[autoexec]\nmount c usb:/dosbox\nc:\ncd \"Leer\"\n");
+    CHECK_EQ(first(p).second, "[sdl]\nfullscreen=true\n[autoexec]\nmount c \"usb:/dosbox/Leer\"\nc:\n");
 }
 
 TEST(launch_dosbox_without_template) {
@@ -189,7 +189,7 @@ TEST(launch_dosbox_without_template) {
     fs.addFile("usb:/dosbox/Doom/DOOM.EXE");
     LaunchPlan p = makeLaunchPlan(mkGame(System::Adventure, "usb:/dosbox/Doom"), fs);
     CHECK_EQ(p.filesToWrite.size(), (size_t)1);
-    CHECK_EQ(first(p).second, "[autoexec]\nmount c usb:/dosbox\nc:\ncd \"Doom\"\nDOOM.EXE\n");
+    CHECK_EQ(first(p).second, "[autoexec]\nmount c \"usb:/dosbox/Doom\"\nc:\nDOOM.EXE\n");
 }
 
 // --- pickDosCommand ---

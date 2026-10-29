@@ -154,9 +154,9 @@ std::string dosboxConfig(const Game& g, IFileSystem& fs) {
     std::string cmd = pickDosCommand(entries, folder, autoexec);
 
     kept.push_back("[autoexec]");
-    kept.push_back("mount c usb:/dosbox");
+    // DOSBox 0.74 kennt keine langen Dateinamen: Spielordner direkt als C: mounten, kein cd.
+    kept.push_back("mount c \"" + g.dir + "\"");
     kept.push_back("c:");
-    kept.push_back("cd \"" + folder + "\"");
     if (!cmd.empty()) kept.push_back(cmd);
     return joinLines(kept);
 }
