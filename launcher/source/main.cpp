@@ -3,8 +3,10 @@
 
 #include <vector>
 
+#include "core/launch.h"
 #include "core/model.h"
 #include "core/scanner.h"
+#include "wii/boot.h"
 #include "wii/fs_wii.h"
 
 // Vorläufige Rauchtest-Anzeige (Task 7), bis es eine Schrift gibt:
@@ -22,6 +24,23 @@ const System kSystems[] = {System::Wii, System::GameCube, System::N64, System::S
 const u32 kColors[] = {0x3B82F6FF, 0x8B5CF6FF, 0xF59E0BFF, 0xEC4899FF,
                        0x10B981FF, 0x06B6D4FF, 0xF97316FF};
 constexpr int kSystemCount = sizeof(kSystems) / sizeof(kSystems[0]);
+
+// TEMPORÄR (Task 8, Hardwaretests A/B/C): feste Startpläne auf Knopfdruck.
+// A = Snes9x GX mit Super Mario World, 1 = USB Loader GX mit RMCP01,
+// 2 = returnToWiiMenu(), Minus = launchHbc(). Fliegt raus, sobald es ein Menü gibt.
+LaunchPlan testPlanSnes() {
+    LaunchPlan p;
+    p.dolPath = "sd:/apps/snes9xgx/boot.dol";
+    p.args = {"usb:/snes9xgx/roms", "Super Mario World (Europe).sfc"};
+    return p;
+}
+
+LaunchPlan testPlanUsbLoader() {
+    LaunchPlan p;
+    p.dolPath = "sd:/apps/usbloader_gx/boot.dol";
+    p.args = {"RMCP01"};
+    return p;
+}
 
 }  // namespace
 
@@ -46,13 +65,29 @@ int main() {
     int squares = (total + 9) / 10;
     if (squares > 60) squares = 60;
 
+    bool bootFailed = false;
     while (true) {
         WPAD_ScanPads();
-        if (WPAD_ButtonsDown(0) & WPAD_BUTTON_HOME) break;
+        u32 down = WPAD_ButtonsDown(0);
+        if (down & WPAD_BUTTON_HOME) break;
+        // TEMPORÄR (Task 8): bootDol kehrt nur bei Fehler zurück -> rotes Feld oben rechts.
+        if (down & WPAD_BUTTON_A) bootFailed = !bootDol(testPlanSnes(), fs);
+        if (down & WPAD_BUTTON_1) bootFailed = !bootDol(testPlanUsbLoader(), fs);
+        if (down & WPAD_BUTTON_2) {
+            fs.unmountAll();
+            GRRLIB_Exit();
+            returnToWiiMenu();
+        }
+        if (down & WPAD_BUTTON_MINUS) {
+            fs.unmountAll();
+            GRRLIB_Exit();
+            launchHbc();
+        }
 
         GRRLIB_FillScreen(0x0F1218FF);
         GRRLIB_Rectangle(40, 30, 30, 30, usbOk ? kGreen : kRed, true);
         GRRLIB_Rectangle(80, 30, 30, 30, sdOk ? kGreen : kRed, true);
+        if (bootFailed) GRRLIB_Rectangle(570, 30, 30, 30, kRed, true);
 
         for (int i = 0; i < kSystemCount; ++i) {
             int y = 80 + i * 28;
