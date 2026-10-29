@@ -60,3 +60,18 @@ TEST(extractGameId_cases) {
     CHECK(!extractGameId("Game [!]").has_value());
     CHECK(!extractGameId("Game [rmcp01]").has_value());
 }
+
+TEST(cleanTitle_single_two_letter_kept) {
+    CHECK_EQ(cleanTitle("Resident Evil (HD)"), "Resident Evil (HD)");
+    CHECK_EQ(cleanTitle("Mario Kart (DX) (Europe) (En,De)"), "Mario Kart (DX)");
+}
+
+TEST(cleanTitle_umlauts_survive) {
+    CHECK_EQ(cleanTitle("Benjamin Bl\xC3\xBCmchen - T\xC3\xB6r\xC3\xB6\xC3\xB6\xC3\xB6! im Zoo (Germany) [SUZD7K]"),
+             "Benjamin Bl\xC3\xBCmchen - T\xC3\xB6r\xC3\xB6\xC3\xB6\xC3\xB6! im Zoo");
+    CHECK_EQ(cleanTitle("Die drei ???"), "Die drei ???");
+}
+
+TEST(cleanTitle_article_only_as_suffix) {
+    CHECK_EQ(cleanTitle("Ja, Das ist Mario"), "Ja, Das ist Mario");
+}

@@ -49,10 +49,8 @@ const char* const kRegionWords[] = {
 const char* const kCodes[] = {"u", "e", "j", "w", "ue", "ju", "jue", "g", "f", "i", "s", "pal", "ntsc"};
 const char* const kFlags[] = {"digital", "aftermarket", "pirate", "unl", "!"};
 
-bool isLangCode(const std::string& p) {
-    if (p.size() != 2) return false;
-    return (p[0] >= 'a' && p[0] <= 'z') && (p[1] >= 'a' && p[1] <= 'z');
-}
+const char* const kLangCodes[] = {"en", "fr", "de", "es", "it", "nl", "pt", "sv", "da", "no",
+                                  "fi", "ja", "ko", "zh", "ru", "pl", "el", "tr", "cs", "hu"};
 
 // Inhalt einer runden Klammer (ohne Klammern) ist ein Region-/Sprach-/Versions-Tag.
 bool isTagContent(const std::string& raw) {
@@ -75,9 +73,9 @@ bool isTagContent(const std::string& raw) {
     bool allRegion = true, allLang = true;
     for (const auto& p : parts) {
         if (!inList(p, kRegionWords, sizeof kRegionWords / sizeof *kRegionWords)) allRegion = false;
-        if (!isLangCode(p)) allLang = false;
+        if (!inList(p, kLangCodes, sizeof kLangCodes / sizeof *kLangCodes)) allLang = false;
     }
-    return allRegion || allLang;
+    return allRegion || (allLang && parts.size() >= 2);
 }
 
 // Entfernt alle [...] und erkannte (...) Gruppen.
@@ -112,7 +110,7 @@ std::string moveArticle(const std::string& s) {
         size_t pos = 0;
         while ((pos = s.find(needle, pos)) != std::string::npos) {
             size_t after = pos + needle.size();
-            if (after == s.size() || s[after] == ' ')
+            if (after == s.size() || s.compare(after, 3, " - ") == 0)
                 return std::string(art) + " " + s.substr(0, pos) + s.substr(after);
             pos = after;
         }
