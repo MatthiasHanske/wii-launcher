@@ -33,3 +33,5 @@ python3 -I tools/covers-emu.py --system n64 --limit 20
 ```
 
 Ohne `GITHUB_TOKEN` gilt das niedrige anonyme API-Limit; bei Bedarf `export GITHUB_TOKEN=$(gh auth token)`. ScummVM- und DOS-Spiele bekommen kein Cover.
+
+Die Cover unter `tools/dolphin-sd/` stammen von GameTDB und sind nur Testmaterial für den privaten Gebrauch; vor einer Veröffentlichung des Repos müssen sie durch eigene Bilder ersetzt werden.
