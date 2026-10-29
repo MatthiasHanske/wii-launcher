@@ -10,6 +10,8 @@
 #include <wiiuse/wpad.h>
 
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include "app_booter_bin.h"
 
@@ -71,6 +73,35 @@ u16 be16(const u8* p) { return static_cast<u16>((p[0] << 8) | p[1]); }
 bool inMem1(u32 a) { return a >= 0x80000000 && a < 0x81800000; }
 bool inMem2(u32 a) { return a >= 0x90000000 && a < 0x94000000; }
 
+// Liest Ausschnitte der Programmdatei: aus dem Speicher (bootDol, ganze Datei geladen) oder
+// per readBytes von der SD (canBoot, nur Header, Programmheader und Entry+4..8).
+class ExecReader {
+public:
+    ExecReader(const u8* data, size_t size) : data_(data), size_(size) {}
+    ExecReader(WiiFs& fs, const std::string& path, size_t size) : fs_(&fs), path_(&path), size_(size) {}
+
+    size_t size() const { return size_; }
+
+    // false, wenn der Bereich nicht ganz in der Datei liegt oder das Lesen scheitert.
+    bool read(size_t off, size_t len, std::vector<u8>& out) {
+        if (off > size_ || len > size_ - off) return false;
+        if (data_) {
+            out.assign(data_ + off, data_ + off + len);
+            return true;
+        }
+        readError_ = !fs_->readBytes(*path_, off, len, out) || out.size() != len;
+        return !readError_;
+    }
+    bool readError() const { return readError_; }
+
+private:
+    const u8* data_ = nullptr;
+    WiiFs* fs_ = nullptr;
+    const std::string* path_ = nullptr;
+    size_t size_ = 0;
+    bool readError_ = false;
+};
+
 // Ergebnis der Header-Prüfung.
 struct ExecInfo {
     bool elf = false;
@@ -91,22 +122,26 @@ bool overlapsReserved(u32 addr, u32 len) {
            hits(0x13300800, 0x13300800 + kMaxArgsSize);
 }
 
-bool isElf(const u8* d, size_t size) { return size >= 4 && std::memcmp(d, "\x7f" "ELF", 4) == 0; }
-
 // ELF wie load_elf_image im Booter: ET_EXEC, EM_PPC, Programmheader vorhanden und 32 Byte
 // groß, jedes PT_LOAD-Segment in der Datei, filesz <= memsz, Ziel (p_paddr, auf 0x8...
 // normiert) nicht im reservierten Bereich, Entry in einem geladenen Segment.
-bool inspectElf(const u8* d, size_t size, ExecInfo& info) {
-    if (size < 52 || be16(d + 16) != 2 || be16(d + 18) != 20) return false;
+bool inspectElf(ExecReader& r, ExecInfo& info) {
+    const size_t size = r.size();
+    std::vector<u8> h;
+    if (size < 52 || !r.read(0, 52, h)) return false;
+    const u8* d = h.data();
+    if (be16(d + 16) != 2 || be16(d + 18) != 20) return false;
     u32 phoff = be32(d + 28);
     u16 phentsize = be16(d + 42);
     u16 phnum = be16(d + 44);
     if (phoff == 0 || phnum == 0 || phentsize != 32) return false;
     if (phoff > size || static_cast<uint64_t>(phnum) * 32 > size - phoff) return false;
     u32 entry = (be32(d + 24) & 0x3FFFFFFF) | 0x80000000;
+    std::vector<u8> phs;
+    if (!r.read(phoff, phnum * 32u, phs)) return false;
     bool entryFound = false;
     for (u16 i = 0; i < phnum; ++i) {
-        const u8* ph = d + phoff + i * 32u;
+        const u8* ph = phs.data() + i * 32u;
         if (be32(ph) != 1) continue;  // PT_LOAD
         u32 off = be32(ph + 4);
         u32 dest = (be32(ph + 12) & 0x3FFFFFFF) | 0x80000000;
@@ -127,8 +162,11 @@ bool inspectElf(const u8* d, size_t size, ExecInfo& info) {
 // DOL-Header (big endian): 7 Text- + 11 Datensektionen, Offsets 0x00, Adressen 0x48,
 // Größen 0x90; BSS 0xD8/0xDC; Entry 0xE0. Wie load_dol_image im Booter gelten Sektionen
 // mit Größe 0 oder Adresse < 0x100 als nicht geladen.
-bool inspectDol(const u8* d, size_t size, ExecInfo& info) {
-    if (size <= 0x100) return false;
+bool inspectDol(ExecReader& r, ExecInfo& info) {
+    const size_t size = r.size();
+    std::vector<u8> h;
+    if (size <= 0x100 || !r.read(0, 0x100, h)) return false;
+    const u8* d = h.data();
     u32 entry = be32(d + 0xE0);
     if (!inMem1(entry) && !inMem2(entry)) return false;
     bool anyText = false;
@@ -166,11 +204,56 @@ bool inspectDol(const u8* d, size_t size, ExecInfo& info) {
 // argv nur, wenn an Entry+4 "_arg" steht (wie der HBC). Sonst läge an Entry+8 Code, den
 // der Booter mit 24 Byte argv überschreiben würde (z. B. HackMii-Installer boot.elf).
 // DollZ-gepackte DOLs (Byte 0x100 == 0x3C) bekommen zusätzlich nie argv.
-bool acceptsArgv(const u8* d, size_t size, const ExecInfo& info) {
-    if (!info.elf && d[0x100] == 0x3C) return false;
-    if (info.entryOffset > size || size - info.entryOffset < 8) return false;
-    return be32(d + info.entryOffset + 4) == ARGV_MAGIC;
+bool acceptsArgv(ExecReader& r, const ExecInfo& info) {
+    std::vector<u8> b;
+    if (!info.elf && (!r.read(0x100, 1, b) || b[0] == 0x3C)) return false;
+    if (!r.read(info.entryOffset, 8, b)) return false;
+    return be32(b.data() + 4) == ARGV_MAGIC;
 }
+
+// Gemeinsame Prüfung von canBoot und bootDol (schreibt nichts). reason nur bei false gesetzt.
+bool checkExec(ExecReader& r, const std::string& path, bool& withArgv, std::string& reason) {
+    std::vector<u8> magic;
+    if (r.size() < 4) {
+        reason = "Kein g\xC3\xBCltiges Programm: " + path;
+        return false;
+    }
+    if (!r.read(0, 4, magic)) {
+        reason = "Nicht lesbar: " + path;
+        return false;
+    }
+    bool elf = std::memcmp(magic.data(), "\x7f" "ELF", 4) == 0;
+    ExecInfo info;
+    bool valid = elf ? inspectElf(r, info) : inspectDol(r, info);
+    if (valid) withArgv = acceptsArgv(r, info);
+    if (r.readError()) {
+        reason = "Nicht lesbar: " + path;
+        return false;
+    }
+    if (!valid) {
+        reason = "Kein g\xC3\xBCltiges Programm: " + path;
+        return false;
+    }
+    return true;
+}
+
+// argv[0] = dolPath, dann plan.args.
+std::vector<std::string> buildArgs(const LaunchPlan& plan) {
+    std::vector<std::string> args;
+    args.reserve(plan.args.size() + 1);
+    args.push_back(plan.dolPath);
+    args.insert(args.end(), plan.args.begin(), plan.args.end());
+    return args;
+}
+
+bool argsFit(const std::vector<std::string>& args) {
+    size_t argsLength = sizeof(struct __argv) + 1;
+    for (const std::string& a : args) argsLength += a.size() + 1;
+    return argsLength <= kMaxArgsSize;
+}
+
+// Der eigene Heap darf nicht in den Zielbereich gewachsen sein.
+bool heapBelowExec() { return reinterpret_cast<u32>(SYS_GetArena2Lo()) <= reinterpret_cast<u32>(kExecAddr); }
 
 // libogc prüft beim exit() den HBC-Reload-Stub ("STUB" / "HAXX"). Ohne die Magic fällt
 // exit() auf SYS_RETURNTOMENU zurück, also Wii-Menü statt HBC.
@@ -182,32 +265,54 @@ void clearHbcStub() {
 
 }  // namespace
 
+bool canBoot(const LaunchPlan& plan, WiiFs& fs, std::string& reason) {
+    if (plan.dolPath.empty()) {
+        reason = "Kein Startprogramm bekannt";
+        return false;
+    }
+    struct stat st;
+    if (stat(plan.dolPath.c_str(), &st) != 0) {
+        reason = "Fehlt auf der SD: " + plan.dolPath;
+        return false;
+    }
+    size_t size = static_cast<size_t>(st.st_size);
+    if (size == 0 || size > kMaxExecSize) {
+        reason = (size == 0 ? "Leere Datei: " : "Gr\xC3\xB6\xC3\x9F" "er als 16 MB: ") + plan.dolPath;
+        return false;
+    }
+    if (!argsFit(buildArgs(plan))) {
+        reason = "Startargumente zu lang";
+        return false;
+    }
+    ExecReader r(fs, plan.dolPath, size);
+    bool withArgv = false;
+    if (!checkExec(r, plan.dolPath, withArgv, reason)) return false;
+    if (!heapBelowExec()) {
+        reason = "Zu wenig Speicher";
+        return false;
+    }
+    return true;
+}
+
 bool bootDol(const LaunchPlan& plan, WiiFs& fs) {
-    // 1. Prüfen, solange nichts verändert ist: Größe, Header, Argumente, Heap.
+    // 1. Prüfen, solange nichts verändert ist: Größe, Header, Argumente, Heap. Gleiche
+    // Prüfung wie canBoot, hier auf der ganz gelesenen Datei.
     struct stat st;
     if (stat(plan.dolPath.c_str(), &st) != 0) return false;
     size_t size = static_cast<size_t>(st.st_size);
     if (size == 0 || size > kMaxExecSize) return false;
 
-    std::vector<std::string> args;
-    args.reserve(plan.args.size() + 1);
-    args.push_back(plan.dolPath);
-    args.insert(args.end(), plan.args.begin(), plan.args.end());
-    size_t argsLength = sizeof(struct __argv) + 1;
-    for (const std::string& a : args) argsLength += a.size() + 1;
-    if (argsLength > kMaxArgsSize) return false;
+    std::vector<std::string> args = buildArgs(plan);
+    if (!argsFit(args)) return false;
 
     bool withArgv = false;
     {
         std::vector<uint8_t> data;
-        if (!fs.readBytes(plan.dolPath, 0, size, data)) return false;
-        ExecInfo info;
-        bool valid = isElf(data.data(), size) ? inspectElf(data.data(), size, info)
-                                              : inspectDol(data.data(), size, info);
-        if (!valid) return false;
-        withArgv = acceptsArgv(data.data(), size, info);
-        // Der eigene Heap darf nicht in den Zielbereich gewachsen sein.
-        if (reinterpret_cast<u32>(SYS_GetArena2Lo()) > reinterpret_cast<u32>(kExecAddr)) return false;
+        if (!fs.readBytes(plan.dolPath, 0, size, data) || data.size() != size) return false;
+        ExecReader r(data.data(), size);
+        std::string reason;
+        if (!checkExec(r, plan.dolPath, withArgv, reason)) return false;
+        if (!heapBelowExec()) return false;
 
         // 2. Erst jetzt Konfigurationsdateien schreiben.
         for (const auto& file : plan.filesToWrite)

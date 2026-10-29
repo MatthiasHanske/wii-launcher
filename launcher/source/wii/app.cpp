@@ -108,6 +108,7 @@ private:
                         std::vector<std::pair<Action, screens::Hit>>& out);
     void handle(const Command& c);
     void launch(const Game& g);
+    void showLaunchError(const std::string& title, const std::string& detail);
     [[noreturn]] void leave(Command::Kind kind);
     [[noreturn]] void abortToWiiMenu();
     void retryUsb();
@@ -293,6 +294,16 @@ void App::handle(const Command& c) {
 }
 
 void App::launch(const Game& g) {
+    const std::string title = g.title;
+    LaunchPlan plan = makeLaunchPlan(g, fs_);
+    std::string reason;
+    if (!canBoot(plan, fs_, reason)) {
+        // Vor dem Point of no Return gescheitert: nichts geändert, kein Eintrag in "Zuletzt
+        // gespielt". Auswahl, Vorschau und offenes Overlay bleiben, nur die Meldung erscheint.
+        showLaunchError(title, reason);
+        return;
+    }
+
     RecentEntry e;
     e.timestamp = static_cast<int64_t>(std::time(nullptr));
     e.system = g.system;
@@ -302,31 +313,29 @@ void App::launch(const Game& g) {
     if (sdOk_) fs_.writeText(kRecentPath, serializeRecent(recentEntries_));
     saveSettings();
 
-    const std::string title = g.title;
     fadeOut(nullptr);
     messageFrame("Starte " + title + " " + kEllipsis);
     // Cover freigeben: bootDol liest die Programmdatei (bis 16 MB) auf den Heap.
     covers_.clear();
 
-    LaunchPlan plan = makeLaunchPlan(g, fs_);
     bootDol(plan, fs_);  // kehrt nur bei Fehlern zurück, Mounts und Video sind dann intakt
 
-    uint64_t now = nowMs();
-    errorTitle_ = "Konnte " + title + " nicht starten";
-    if (plan.dolPath.empty())
-        errorDetail_ = "Kein Startprogramm bekannt";
-    else if (!fs_.exists(plan.dolPath))
-        errorDetail_ = "Fehlt auf der SD: " + plan.dolPath;
-    else
-        errorDetail_ = "Nicht lesbar oder kein g\xC3\xBCltiges Programm: " + plan.dolPath;
-    errorStart_ = now;
-    errorUntil_ = now + kErrorMs;
+    // canBoot war erfolgreich, also Lese-/Schreibfehler oder Datei zwischendurch geändert.
+    showLaunchError(title, "Nicht lesbar oder kein g\xC3\xBCltiges Programm: " + plan.dolPath);
     // Karussell zeigt das gerade gewählte Spiel (jetzt vorn in recent): Vorschau weg,
     // offenes Overlay (z. B. Suche) zu.
     state_.carouselPreview = nullptr;
     state_.overlay = Overlay::None;
     state_.carouselIndex = 0;
     refreshRecent();
+}
+
+void App::showLaunchError(const std::string& title, const std::string& detail) {
+    uint64_t now = nowMs();
+    errorTitle_ = "Konnte " + title + " nicht starten";
+    errorDetail_ = detail;
+    errorStart_ = now;
+    errorUntil_ = now + kErrorMs;
     lastFrame_ = now;
 }
 

@@ -1,6 +1,15 @@
 #pragma once
+#include <string>
+
 #include "core/launch.h"
 #include "wii/fs_wii.h"
+
+// Vorabprüfung ohne Schreibzugriff: Startprogramm bekannt, vorhanden (stat), Größe (max.
+// 16 MB), Argumentlänge, DOL/ELF-Header wie in bootDol (liest nur Header, Programmheader und
+// Entry+4..8, nicht die ganze Datei). Bei false steht in reason ein Anzeigetext (UTF-8),
+// z. B. "Fehlt auf der SD: sd:/apps/not64/boot.dol". Der Aufrufer trägt das Spiel erst nach
+// true in "Zuletzt gespielt" ein.
+bool canBoot(const LaunchPlan& plan, WiiFs& fs, std::string& reason);
 
 // Startet plan.dolPath (DOL oder ELF) über den app_booter (booter/, GPL-2.0, Dimok).
 // Ablauf: Größe (max. 16 MB) und Header prüfen (ELF: ET_EXEC/EM_PPC; DOL: Entry,
