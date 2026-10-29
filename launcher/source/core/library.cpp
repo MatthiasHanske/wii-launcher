@@ -15,6 +15,7 @@ Library::Library(std::vector<Game> games) : games_(std::move(games)) {
 
 void Library::setEnabled(const SystemSet& s) {
     enabled_ = s;
+    if (tab_ && !enabled_.get(*tab_)) tab_.reset();
     rebuild();
 }
 

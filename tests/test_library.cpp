@@ -108,18 +108,39 @@ TEST(library_search) {
     lib.setEnabled(SystemSet::defaults());
     lib.setTab(System::N64);  // Tab wird ignoriert
     auto r = lib.search("mar", 10);
-    CHECK(!r.empty());
-    size_t marios = 0;
-    for (auto g : r) {
-        CHECK(g->system != System::NES && g->system != System::SNES);
-        CHECK(g->title.find("Mario") != std::string::npos || g->title.find("Mar") != std::string::npos);
-        ++marios;
-    }
-    CHECK_EQ(marios, (size_t)5);  // 3x Wii (MK, NSMB, SPM) + SM64 + MK64 -> 5
+    std::vector<std::string> got;
+    for (auto g : r) got.push_back(g->title);
+    std::vector<std::string> expect = {"Mario Kart 64", "Mario Kart Wii", "New Super Mario Bros. Wii",
+                                       "Super Mario 64", "Super Paper Mario"};
+    CHECK(got == expect);
     CHECK_EQ(lib.search("MAR", 10).size(), r.size());
     CHECK_EQ(lib.search("mar", 2).size(), (size_t)2);
     CHECK(lib.search("", 10).empty());
     CHECK(lib.search("xyzzy", 10).empty());
+}
+
+TEST(library_search_umlaut_title) {
+    std::vector<Game> v = fixture();
+    v.push_back(mk(System::Wii, "W\xC3\xBCrfel Mario"));
+    Library lib(std::move(v));
+    lib.setEnabled(SystemSet::defaults());
+    bool found = false;
+    for (auto g : lib.search("mario", 20))
+        if (g->title == "W\xC3\xBCrfel Mario") found = true;
+    CHECK(found);
+}
+
+TEST(library_setEnabled_resets_disabled_tab) {
+    Library lib(fixture());
+    SystemSet s = SystemSet::defaults();
+    s.at(System::NES) = true;
+    lib.setEnabled(s);
+    lib.setTab(System::NES);
+    CHECK_EQ(lib.visible().size(), (size_t)5);
+    lib.setEnabled(SystemSet::defaults());  // NES aus -> Tab zurueck auf Alle
+    CHECK_EQ(lib.visible().size(), (size_t)17);
+    lib.setEnabled(s);  // wieder an: bleibt bei Alle
+    CHECK_EQ(lib.visible().size(), (size_t)22);
 }
 
 TEST(library_pages) {
@@ -145,23 +166,32 @@ TEST(library_empty) {
     CHECK_EQ(lib.firstIndexForLetter('A'), -1);
 }
 
-TEST(library_performance_2000) {
+TEST(library_performance_1605) {
     std::vector<Game> v;
-    for (int i = 0; i < 2000; ++i) {
-        std::string t = "Game ";
+    for (int i = 0; i < 48; ++i) v.push_back(mk(System::Wii, "Wii Game " + std::to_string(i)));
+    for (int i = 0; i < 1557; ++i) {
+        std::string t = "Nes ";
         t += char('a' + i % 26);
         t += std::to_string(i);
-        v.push_back(mk(i % 2 ? System::Wii : System::N64, t));
+        v.push_back(mk(System::NES, t));
     }
-    Library lib(std::move(v));
-    lib.setEnabled(SystemSet::defaults());
+    SystemSet s = SystemSet::defaults();
+    s.at(System::NES) = true;
     auto t0 = std::chrono::steady_clock::now();
+    Library lib(std::move(v));
+    lib.setEnabled(s);
     lib.setTab(std::nullopt);
     auto l = lib.letters();
-    auto r = lib.search("a", 10);
+    int sum = 0;
+    for (char c = 'A'; c <= 'Z'; ++c) sum += lib.firstIndexForLetter(c);
+    size_t items = 0;
+    for (int p = 0; p < lib.pageCount(); ++p) items += lib.page(p).size();
+    auto r = lib.search("zzz", 10);
     auto ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     CHECK(ms < 50.0);
-    CHECK_EQ(lib.visible().size(), (size_t)2000);
-    CHECK_EQ(r.size(), (size_t)10);
+    CHECK_EQ(lib.visible().size(), (size_t)1605);
+    CHECK_EQ(items, (size_t)1605);
+    CHECK(r.empty());
     CHECK(!l.empty());
+    CHECK(sum != 0);
 }
