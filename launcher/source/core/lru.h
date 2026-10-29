@@ -47,6 +47,9 @@ public:
         return true;
     }
 
+    // Ältester Eintrag ohne Entfernen; leer -> nullptr. Zeiger gilt bis zur nächsten Änderung.
+    const Key* oldest() const { return order_.empty() ? nullptr : &order_.back().first; }
+
     bool contains(const Key& key) const { return index_.count(key) != 0; }
     size_t totalBytes() const { return total_; }
     size_t size() const { return order_.size(); }

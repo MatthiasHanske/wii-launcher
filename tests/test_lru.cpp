@@ -98,3 +98,15 @@ TEST(lru_evict_empty_returns_default) {
     CHECK_EQ(p.evict(), "");
     CHECK_EQ(p.size(), (size_t)0);
 }
+
+TEST(lru_oldest_peeks_without_removing) {
+    LruPolicy<std::string> p;
+    CHECK(p.oldest() == nullptr);
+    p.insert("a", 1);
+    p.insert("b", 1);
+    CHECK(p.oldest() != nullptr);
+    CHECK_EQ(*p.oldest(), "a");
+    CHECK_EQ(p.size(), (size_t)2);
+    p.touch("a");
+    CHECK_EQ(*p.oldest(), "b");
+}
