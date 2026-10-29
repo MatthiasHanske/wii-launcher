@@ -35,11 +35,10 @@ bool ios58Installed() {
 }
 
 // Wie SetupARGV in USB Loader GX: Struktur am Anfang, Befehlszeile (NUL-getrennt) direkt dahinter.
-// Länge prüft bootDol vorher (kMaxArgsSize). DollZ-komprimierte DOLs bekommen wie in
-// USB Loader GX eine genullte Struktur (argvMagic = 0), sonst überschreibt der Booter
-// Entry+8, wo bei DollZ Code liegt.
-void writeArgv(const std::vector<std::string>& args, bool dollz) {
-    if (dollz) {
+// Länge prüft bootDol vorher (kMaxArgsSize). Programme ohne "_arg"-Slot bekommen eine
+// genullte Struktur (argvMagic = 0), dann kopiert der Booter nichts nach Entry+8.
+void writeArgv(const std::vector<std::string>& args, bool withArgv) {
+    if (!withArgv) {
         std::memset(kArgsAddr, 0, sizeof(struct __argv));
         DCFlushRange(kArgsAddr, sizeof(struct __argv));
         return;
@@ -72,25 +71,84 @@ u16 be16(const u8* p) { return static_cast<u16>((p[0] << 8) | p[1]); }
 bool inMem1(u32 a) { return a >= 0x80000000 && a < 0x81800000; }
 bool inMem2(u32 a) { return a >= 0x90000000 && a < 0x94000000; }
 
+// Ergebnis der Header-Prüfung.
+struct ExecInfo {
+    bool elf = false;
+    // Datei-Offset der Einsprungadresse; die libogc-crt0 legt dort "b ...; .ascii \"_arg\""
+    // ab, der Booter kopiert struct __argv nach Entry+8.
+    size_t entryOffset = 0;
+};
+
+// Physische Bereiche, die der Booter während des Ladens selbst braucht: Programmkopie bis
+// Booter-Ende inkl. Stack (link.ld: 0x93000000 + Code + 0x8000 Stack = 0x93008540) und die
+// Argumente. Ein Programm, das dorthin lädt, würde sich beim Laden selbst überschreiben.
+bool overlapsReserved(u32 addr, u32 len) {
+    if (len == 0) return false;
+    uint64_t start = addr & 0x3FFFFFFF;
+    uint64_t end = start + len;
+    auto hits = [&](uint64_t lo, uint64_t hi) { return start < hi && lo < end; };
+    return hits(0x12000000, 0x13008540) ||
+           hits(0x13300800, 0x13300800 + kMaxArgsSize);
+}
+
 bool isElf(const u8* d, size_t size) { return size >= 4 && std::memcmp(d, "\x7f" "ELF", 4) == 0; }
 
-// ELF: ausführbar (ET_EXEC) und PowerPC (EM_PPC).
-bool validElf(const u8* d, size_t size) {
-    return size >= 52 && be16(d + 16) == 2 && be16(d + 18) == 20;
+// ELF wie load_elf_image im Booter: ET_EXEC, EM_PPC, Programmheader vorhanden und 32 Byte
+// groß, jedes PT_LOAD-Segment in der Datei, filesz <= memsz, Ziel (p_paddr, auf 0x8...
+// normiert) nicht im reservierten Bereich, Entry in einem geladenen Segment.
+bool inspectElf(const u8* d, size_t size, ExecInfo& info) {
+    if (size < 52 || be16(d + 16) != 2 || be16(d + 18) != 20) return false;
+    u32 phoff = be32(d + 28);
+    u16 phentsize = be16(d + 42);
+    u16 phnum = be16(d + 44);
+    if (phoff == 0 || phnum == 0 || phentsize != 32) return false;
+    if (phoff > size || static_cast<uint64_t>(phnum) * 32 > size - phoff) return false;
+    u32 entry = (be32(d + 24) & 0x3FFFFFFF) | 0x80000000;
+    bool entryFound = false;
+    for (u16 i = 0; i < phnum; ++i) {
+        const u8* ph = d + phoff + i * 32u;
+        if (be32(ph) != 1) continue;  // PT_LOAD
+        u32 off = be32(ph + 4);
+        u32 dest = (be32(ph + 12) & 0x3FFFFFFF) | 0x80000000;
+        u32 filesz = be32(ph + 16);
+        u32 memsz = be32(ph + 20);
+        if (filesz > memsz) return false;
+        if (off > size || filesz > size - off) return false;
+        if (overlapsReserved(dest, memsz)) return false;
+        if (!entryFound && filesz > 0 && entry >= dest && entry - dest < filesz) {
+            entryFound = true;
+            info.entryOffset = off + (entry - dest);
+        }
+    }
+    info.elf = true;
+    return entryFound;
 }
 
 // DOL-Header (big endian): 7 Text- + 11 Datensektionen, Offsets 0x00, Adressen 0x48,
-// Größen 0x90; BSS 0xD8/0xDC; Entry 0xE0. Sektionen müssen in der Datei liegen.
-bool validDol(const u8* d, size_t size) {
-    if (size < 0x100) return false;
+// Größen 0x90; BSS 0xD8/0xDC; Entry 0xE0. Wie load_dol_image im Booter gelten Sektionen
+// mit Größe 0 oder Adresse < 0x100 als nicht geladen.
+bool inspectDol(const u8* d, size_t size, ExecInfo& info) {
+    if (size <= 0x100) return false;
     u32 entry = be32(d + 0xE0);
     if (!inMem1(entry) && !inMem2(entry)) return false;
+    bool anyText = false;
+    bool entryFound = false;
     for (int i = 0; i < 18; ++i) {
         u32 off = be32(d + 0x00 + i * 4);
+        u32 addr = be32(d + 0x48 + i * 4);
         u32 len = be32(d + 0x90 + i * 4);
-        if (len == 0) continue;
+        if (len == 0 || addr < 0x100) continue;
         if (off < 0x100 || off > size || len > size - off) return false;
+        if (overlapsReserved(addr, len)) return false;
+        if (i < 7) {
+            anyText = true;
+            if (!entryFound && entry >= addr && entry - addr < len) {
+                entryFound = true;
+                info.entryOffset = off + (entry - addr);
+            }
+        }
     }
+    if (!anyText || !entryFound) return false;
     u32 bss = be32(d + 0xD8);
     u32 bssLen = be32(d + 0xDC);
     if (bssLen > 0) {
@@ -99,8 +157,19 @@ bool validDol(const u8* d, size_t size) {
         bool mem1 = inMem1(bss) && inMem1(last) && last >= bss;
         bool mem2 = inMem2(entry) && inMem2(bss) && inMem2(last) && last >= bss;
         if (!mem1 && !mem2) return false;
+        if (overlapsReserved(bss, bssLen)) return false;
     }
+    info.elf = false;
     return true;
+}
+
+// argv nur, wenn an Entry+4 "_arg" steht (wie der HBC). Sonst läge an Entry+8 Code, den
+// der Booter mit 24 Byte argv überschreiben würde (z. B. HackMii-Installer boot.elf).
+// DollZ-gepackte DOLs (Byte 0x100 == 0x3C) bekommen zusätzlich nie argv.
+bool acceptsArgv(const u8* d, size_t size, const ExecInfo& info) {
+    if (!info.elf && d[0x100] == 0x3C) return false;
+    if (info.entryOffset > size || size - info.entryOffset < 8) return false;
+    return be32(d + info.entryOffset + 4) == ARGV_MAGIC;
 }
 
 // libogc prüft beim exit() den HBC-Reload-Stub ("STUB" / "HAXX"). Ohne die Magic fällt
@@ -128,17 +197,15 @@ bool bootDol(const LaunchPlan& plan, WiiFs& fs) {
     for (const std::string& a : args) argsLength += a.size() + 1;
     if (argsLength > kMaxArgsSize) return false;
 
-    bool dollz = false;
+    bool withArgv = false;
     {
         std::vector<uint8_t> data;
         if (!fs.readBytes(plan.dolPath, 0, size, data)) return false;
-        bool elf = isElf(data.data(), size);
-        if (elf) {
-            if (!validElf(data.data(), size)) return false;
-        } else if (!validDol(data.data(), size)) {
-            return false;
-        }
-        dollz = !elf && data[0x100] == 0x3C;
+        ExecInfo info;
+        bool valid = isElf(data.data(), size) ? inspectElf(data.data(), size, info)
+                                              : inspectDol(data.data(), size, info);
+        if (!valid) return false;
+        withArgv = acceptsArgv(data.data(), size, info);
         // Der eigene Heap darf nicht in den Zielbereich gewachsen sein.
         if (reinterpret_cast<u32>(SYS_GetArena2Lo()) > reinterpret_cast<u32>(kExecAddr)) return false;
 
@@ -163,7 +230,7 @@ bool bootDol(const LaunchPlan& plan, WiiFs& fs) {
 
     if (IOS_GetVersion() != 58 && ios58Installed()) IOS_ReloadIOS(58);  // Fehler egal
 
-    writeArgv(args, dollz);
+    writeArgv(args, withArgv);
 
     std::memcpy(kBooterAddr, app_booter_bin, app_booter_bin_size);
     DCFlushRange(kBooterAddr, app_booter_bin_size);
@@ -197,6 +264,7 @@ void launchHbc() {
         0x000100014C554C5AULL,  // LULZ
         0x000100014F484243ULL,  // OHBC
     };
+    WPAD_Shutdown();
     WII_Initialize();
     for (u64 id : kHbcTitles) WII_LaunchTitle(id);  // kehrt nur bei Fehler zurück
     returnToWiiMenu();
