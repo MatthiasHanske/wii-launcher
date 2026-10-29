@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -48,8 +47,9 @@ struct Rect {
 };
 
 // Cover von der SD (TexCache) plus eingebettete Systemlogos. Pro Bild werden höchstens
-// kNewLoadsPerFrame noch nie angefragte Cover geladen, damit ein Seitenwechsel nicht ein
-// Bild lang hängt; die übrigen zeigen solange eine leere Kachel.
+// kNewLoadsPerFrame Cover von der Karte geladen (weder im Cache noch als Fehlschlag gemerkt,
+// also auch Nachladen nach Verdrängung), damit ein Seitenwechsel nicht ein Bild lang hängt;
+// die übrigen zeigen solange eine leere Kachel.
 class Covers {
 public:
     static constexpr int kNewLoadsPerFrame = 2;
@@ -73,7 +73,6 @@ public:
 private:
     TexCache cache_;
     Texture logos_[7];
-    std::unordered_set<std::string> requested_;
     int loadsLeft_ = kNewLoadsPerFrame;
 };
 
@@ -138,7 +137,8 @@ NoUsbLayout noUsbLayout();
 
 // Nur die oberste Ebene: offenes Overlay -> dessen Regionen, außerhalb des Panels Region::None,
 // im Panel ohne Bedienelement nullopt. Hauptbild: Region::None, wenn nichts getroffen.
-Hit hitTest(float x, float y, const UiState& s, const Library& lib);
+// recent wie für carouselGame(): CarouselLeft/Right gibt es nur, wenn dort ein Spiel liegt.
+Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::vector<const Game*>& recent);
 
 // --- Zeichnen ------------------------------------------------------------------------------
 

@@ -7,7 +7,6 @@
 #include <cmath>
 
 #include "core/covers.h"
-#include "core/png_check.h"
 #include "logo_dos_png.h"
 #include "logo_gc_png.h"
 #include "logo_n64_png.h"
@@ -174,6 +173,15 @@ void drawCover(Covers& covers, const Game& g, const Rect& r, bool mini, float al
     }
 }
 
+// Nachbarn des Karussells (links/rechts von carouselIndex), nullptr wenn keiner.
+void carouselSides(const UiState& s, const Library& lib, const std::vector<const Game*>& recent,
+                   const Game*& left, const Game*& right) {
+    const std::vector<const Game*>& source = recent.empty() ? lib.visible() : recent;
+    const int ci = s.carouselIndex, n = static_cast<int>(source.size());
+    left = (ci - 1 >= 0 && ci - 1 < n) ? source[ci - 1] : nullptr;
+    right = (ci + 1 >= 0 && ci + 1 < n) ? source[ci + 1] : nullptr;
+}
+
 }  // namespace
 
 // --- Covers --------------------------------------------------------------------------------
@@ -189,22 +197,8 @@ void Covers::loadLogos() {
                         {logo_n64_png, logo_n64_png_size},   {logo_snes_png, logo_snes_png_size},
                         {logo_nes_png, logo_nes_png_size},   {logo_sega_png, logo_sega_png_size},
                         {logo_dos_png, logo_dos_png_size}};
-    for (int i = 0; i < 7; ++i) {
-        if (logos_[i].img) continue;
-        PngInfo info;
-        if (!checkPng(src[i].data, src[i].size, info)) continue;
-        GRRLIB_texImg* img = GRRLIB_LoadTexturePNG(src[i].data);
-        if (!img) continue;
-        if (!img->data) {
-            GRRLIB_FreeTexture(img);
-            continue;
-        }
-        logos_[i].img = img;
-        logos_[i].w = static_cast<int>(info.width);
-        logos_[i].h = static_cast<int>(info.height);
-        logos_[i].texW = static_cast<int>(img->w);
-        logos_[i].texH = static_cast<int>(img->h);
-    }
+    for (int i = 0; i < 7; ++i)
+        if (!logos_[i].img) loadPngTexture(src[i].data, src[i].size, logos_[i]);
 }
 
 void Covers::release() {
@@ -224,13 +218,15 @@ const Texture* Covers::cover(const Game& g, bool& pending) {
     pending = false;
     std::string path = coverPath(g);
     if (path.empty()) return nullptr;
-    if (requested_.count(path)) return cache_.get(path);
-    if (loadsLeft_ <= 0) {
-        pending = true;
-        return nullptr;
+    // Nur echte Kartenzugriffe zählen (auch Nachladen nach Verdrängung), Treffer und
+    // gemerkte Fehlschläge kosten nichts.
+    if (!cache_.contains(path) && !cache_.failed(path)) {
+        if (loadsLeft_ <= 0) {
+            pending = true;
+            return nullptr;
+        }
+        --loadsLeft_;
     }
-    --loadsLeft_;
-    requested_.insert(path);
     return cache_.get(path);
 }
 
@@ -241,10 +237,7 @@ void Covers::endFrame() {
 
 void Covers::forgetFailures() { cache_.forgetFailures(); }
 
-void Covers::clear() {
-    cache_.clear();
-    requested_.clear();
-}
+void Covers::clear() { cache_.clear(); }
 
 // --- Layouts -------------------------------------------------------------------------------
 
@@ -352,7 +345,7 @@ NoUsbLayout noUsbLayout() {
 
 // --- Hit-Test ------------------------------------------------------------------------------
 
-Hit hitTest(float x, float y, const UiState& s, const Library& lib) {
+Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::vector<const Game*>& recent) {
     const auto none = std::make_pair(static_cast<int>(Region::None), 0);
     auto hit = [](Region r, int i) { return Hit(std::make_pair(static_cast<int>(r), i)); };
 
@@ -393,8 +386,10 @@ Hit hitTest(float x, float y, const UiState& s, const Library& lib) {
         if (m.bar.tabs[i].contains(x, y)) return hit(Region::Tab, static_cast<int>(i));
     if (m.bar.search.contains(x, y)) return hit(Region::SearchField, 0);
     if (m.carCenter.contains(x, y)) return hit(Region::CarouselCenter, 0);
-    if (m.hitLeft.contains(x, y)) return hit(Region::CarouselLeft, 0);
-    if (m.hitRight.contains(x, y)) return hit(Region::CarouselRight, 0);
+    const Game *left = nullptr, *right = nullptr;
+    carouselSides(s, lib, recent, left, right);
+    if (left && m.hitLeft.contains(x, y)) return hit(Region::CarouselLeft, 0);
+    if (right && m.hitRight.contains(x, y)) return hit(Region::CarouselRight, 0);
     for (int i = 0; i < m.rowCount; ++i)
         if (m.rows[i].contains(x, y)) return hit(Region::ListRow, i);
     for (int i = 0; i < kLetterCells; ++i)
@@ -412,11 +407,9 @@ void drawMain(const UiState& s, const Library& lib, const std::vector<const Game
     // Linke Spalte: Karussell
     if (!recent.empty()) gfx::text(m.leftX, m.labelY, kSizeSmall, kMuted, "Zuletzt gespielt");
 
-    const std::vector<const Game*>& source = recent.empty() ? lib.visible() : recent;
-    const int ci = s.carouselIndex;
     const Game* center = carouselGame(s, recent, lib);
-    const Game* left = (ci - 1 >= 0 && ci - 1 < static_cast<int>(source.size())) ? source[ci - 1] : nullptr;
-    const Game* right = (ci + 1 >= 0 && ci + 1 < static_cast<int>(source.size())) ? source[ci + 1] : nullptr;
+    const Game *left = nullptr, *right = nullptr;
+    carouselSides(s, lib, recent, left, right);
     const float dx = std::round(slide * kSlidePx);
     auto shifted = [dx](Rect r) { r.x += dx; return r; };
 

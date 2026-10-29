@@ -30,9 +30,10 @@ namespace {
 
 constexpr char kSettingsPath[] = "sd:/launcher/settings.txt";
 constexpr char kRecentPath[] = "sd:/launcher/recent.txt";
-// Cover-Budget: ein 2D-Cover (160x228 RGBA8) hat ~146 KB, 12 MB also ~80 Cover. Kleiner als
-// die 24 MB der Demo, weil bootDol die Programmdatei (bis 16 MB) noch auf den Heap liest.
-constexpr size_t kCoverBudget = 12u * 1024 * 1024;
+// Cover-Budget: ein 2D-Cover (160x228 RGBA8) hat ~146 KB, 16 MB also ~110 Cover. Kleiner als
+// die 24 MB der Demo, weil bootDol die Programmdatei (bis 16 MB) noch auf den Heap liest
+// (vor bootDol wird der Cache geleert).
+constexpr size_t kCoverBudget = 16u * 1024 * 1024;
 
 constexpr uint64_t kRepeatDelayMs = 400;
 constexpr uint64_t kRepeatMs = 120;
@@ -136,9 +137,10 @@ void App::run() {
         uint64_t now = nowMs();
         InputState in = pollInput();
         screens::Hit hit;
-        if (in.pointerValid) hit = screens::hitTest(in.pointerX, in.pointerY, state_, *lib_);
+        if (in.pointerValid) hit = screens::hitTest(in.pointerX, in.pointerY, state_, *lib_, recent_);
         // Hover nur bei Wechsel der Region, sonst überschreibt der ruhende Zeiger das Steuerkreuz.
-        if (in.pointerValid && hit != lastHit_) pointerHover(state_, *lib_, hit);
+        // Während der Fehlermeldung kein Hover (sie sperrt die Eingabe).
+        if (in.pointerValid && hit != lastHit_ && now >= errorUntil_) pointerHover(state_, *lib_, hit);
         lastHit_ = in.pointerValid ? hit : std::nullopt;
 
         actions.clear();
@@ -229,15 +231,17 @@ void App::collectActions(const InputState& in, const screens::Hit& hit, uint64_t
     for (Action a : dpad) out.emplace_back(a, std::nullopt);
 
     if (in.pressed & WPAD_BUTTON_A) {
-        // Zeiger auf einem Bedienelement (oder außerhalb eines offenen Panels): Klick.
-        // Zeiger ins Leere bzw. auf eine leere Panelfläche oder kein Zeiger: A wirkt auf die
-        // Auswahl des Steuerkreuzes.
-        bool click = in.pointerValid && hit &&
-                     (hit->first != static_cast<int>(Region::None) || state_.overlay != Overlay::None);
-        if (click)
-            out.emplace_back(Action::PointerClick, hit);
-        else
+        // Regel für A (Entscheidung des Leads):
+        // - Zeiger gültig: A wirkt nur auf das Ziel des Zeigers. Bedienelement -> PointerClick.
+        //   Außerhalb eines offenen Overlay-Panels (Region::None) -> PointerClick, schließt es.
+        //   Leere Panelfläche (nullopt) oder Hintergrund des Hauptbilds (Region::None ohne
+        //   Overlay) -> gar nichts, auch kein Action::A.
+        // - Zeiger ungültig: Action::A auf die Auswahl des Steuerkreuzes.
+        if (!in.pointerValid) {
             out.emplace_back(Action::A, std::nullopt);
+        } else if (hit && (hit->first != static_cast<int>(Region::None) || state_.overlay != Overlay::None)) {
+            out.emplace_back(Action::PointerClick, hit);
+        }
     }
     const std::pair<uint32_t, Action> buttons[] = {{WPAD_BUTTON_B, Action::B},     {WPAD_BUTTON_PLUS, Action::Plus},
                                                    {WPAD_BUTTON_MINUS, Action::Minus}, {WPAD_BUTTON_1, Action::One},
@@ -293,8 +297,12 @@ void App::launch(const Game& g) {
         errorDetail_ = "Nicht lesbar oder kein g\xC3\xBCltiges Programm: " + plan.dolPath;
     errorStart_ = now;
     errorUntil_ = now + kErrorMs;
+    // Karussell zeigt das gerade gewählte Spiel (jetzt vorn in recent): Vorschau weg,
+    // offenes Overlay (z. B. Suche) zu.
+    state_.carouselPreview = nullptr;
+    state_.overlay = Overlay::None;
+    state_.carouselIndex = 0;
     refreshRecent();
-    state_.carouselIndex = 0;  // das gerade gewählte Spiel steht jetzt vorn
     lastFrame_ = now;
 }
 
