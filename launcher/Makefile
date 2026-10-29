@@ -105,9 +105,10 @@ export OUTPUT	:=	$(CURDIR)/$(TARGET)
 #---------------------------------------------------------------------------------
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
-	@# main.o verwerfen, wenn LAUNCHER_GFX_DEMO seit dem letzten Build gewechselt hat
+	@# main.o und Programm verwerfen, wenn LAUNCHER_GFX_DEMO seit dem letzten Build gewechselt hat
+	@# (auch .elf/.dol: make 3.81 auf macOS vergleicht nur ganze Sekunden)
 	@flag=$(if $(strip $(LAUNCHER_GFX_DEMO)),1,0); \
-	[ "`cat $@/gfx_demo.stamp 2>/dev/null`" = "$$flag" ] || { rm -f $@/main.o; echo $$flag > $@/gfx_demo.stamp; }
+	[ "`cat $@/gfx_demo.stamp 2>/dev/null`" = "$$flag" ] || { rm -f $@/main.o $(OUTPUT).elf $(OUTPUT).dol; echo $$flag > $@/gfx_demo.stamp; }
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 #---------------------------------------------------------------------------------
