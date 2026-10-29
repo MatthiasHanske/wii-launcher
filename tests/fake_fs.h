@@ -24,6 +24,7 @@ public:
     }
 
     bool listDir(const std::string& path, std::vector<DirEntry>& out) override {
+        out.clear();
         std::string p = norm(path);
         if (!dirs_.count(p)) return false;
         std::string prefix = p + "/";

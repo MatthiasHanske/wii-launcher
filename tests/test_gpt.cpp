@@ -133,3 +133,30 @@ TEST(gpt_skips_microsoft_reserved_partition) {
     auto r = find(d);
     CHECK_EQ(r.value_or(0), (uint64_t)32768);
 }
+
+TEST(gpt_hybrid_mbr_fat_before_protective_wins) {
+    Disk d;
+    setMbrEntry(d, 0, 0x0C, 8192);
+    setMbrEntry(d, 1, 0xEE, 1);
+    setGptHeader(d);
+    setGptEntry(d, 0, 2048);
+    auto r = find(d);
+    CHECK(r.has_value());
+    CHECK_EQ(r.value_or(0), (uint64_t)8192);
+}
+
+TEST(gpt_entry_size_256_uses_header_stride) {
+    Disk d;
+    setMbrEntry(d, 0, 0xEE, 1);
+    setGptHeader(d);
+    putLe32(d.s1.data() + 84, 256);
+    // Index 1 bei Schrittweite 256 liegt bei Byte 256 (= Index 2 bei 128).
+    uint8_t* e = d.entries.data() + 256;
+    e[0] = 0xA2;
+    putLe64(e + 32, 10000);
+    // Köder: bei falscher Schrittweite 128 würde Index 1 (Byte 128) gelesen.
+    setGptEntry(d, 1, 777);
+    auto r = find(d);
+    CHECK(r.has_value());
+    CHECK_EQ(r.value_or(0), (uint64_t)10000);
+}

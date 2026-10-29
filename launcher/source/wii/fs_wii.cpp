@@ -69,6 +69,9 @@ bool WiiFs::mountSd() {
 
 bool WiiFs::mountUsb(int retries, int delayMs) {
     if (usbMounted_) return true;
+    // Höchstens retries Durchläufe plus zwei fatMountSimple-Versuche (einer nach einem
+    // fehlgeschlagenen fatMount auf erkannter LBA, einer nach Ablauf aller Durchläufe).
+    bool triedSimple = false;
     for (int attempt = 0; attempt < retries; ++attempt) {
         if (attempt > 0) usleep(static_cast<useconds_t>(delayMs) * 1000);
         if (!__io_usbstorage.startup() || !__io_usbstorage.isInserted()) continue;
@@ -81,6 +84,14 @@ bool WiiFs::mountUsb(int retries, int delayMs) {
                 usbMounted_ = true;
                 return true;
             }
+            // Partition erkannt, aber kein FAT darauf einhängbar: libfat einmal selbst suchen lassen.
+            if (!triedSimple) {
+                triedSimple = true;
+                if (fatMountSimple("usb", &__io_usbstorage)) {
+                    usbMounted_ = true;
+                    return true;
+                }
+            }
             continue;
         }
         // Lesbar, aber keine Partition erkannt (z. B. Superfloppy): libfat einmal selbst
@@ -88,7 +99,9 @@ bool WiiFs::mountUsb(int retries, int delayMs) {
         usbMounted_ = fatMountSimple("usb", &__io_usbstorage);
         return usbMounted_;
     }
-    return false;
+    // Letzter Versuch nach Ablauf aller Durchläufe.
+    usbMounted_ = fatMountSimple("usb", &__io_usbstorage);
+    return usbMounted_;
 }
 
 void WiiFs::unmountAll() {
@@ -101,6 +114,7 @@ void WiiFs::unmountAll() {
 }
 
 bool WiiFs::listDir(const std::string& path, std::vector<DirEntry>& out) {
+    out.clear();
     DIR* d = opendir(path.c_str());
     if (!d) return false;
     while (struct dirent* e = readdir(d)) {
