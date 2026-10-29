@@ -69,9 +69,10 @@ bool WiiFs::mountSd() {
 
 bool WiiFs::mountUsb(int retries, int delayMs) {
     if (usbMounted_) return true;
-    // Höchstens retries Durchläufe plus zwei fatMountSimple-Versuche (einer nach einem
-    // fehlgeschlagenen fatMount auf erkannter LBA, einer nach Ablauf aller Durchläufe).
-    bool triedSimple = false;
+    // Wiederholt nur, solange die Platte nicht bereit (nicht lesbar) ist. Sobald sie lesbar
+    // ist, entscheidet ein Durchlauf: fatMount auf der erkannten LBA, sonst einmal
+    // fatMountSimple; ein erneuter Versuch auf derselben LBA ändert nichts. Nach Ablauf aller
+    // Durchläufe ohne lesbare Platte noch ein letzter fatMountSimple.
     for (int attempt = 0; attempt < retries; ++attempt) {
         if (attempt > 0) usleep(static_cast<useconds_t>(delayMs) * 1000);
         if (!__io_usbstorage.startup() || !__io_usbstorage.isInserted()) continue;
@@ -79,23 +80,13 @@ bool WiiFs::mountUsb(int retries, int delayMs) {
         bool readOk = false;
         std::optional<uint64_t> lba = probeUsbPartition(readOk);
         if (!readOk) continue;  // Platte noch nicht bereit
-        if (lba && *lba <= UINT32_MAX) {
-            if (fatMount("usb", &__io_usbstorage, static_cast<sec_t>(*lba), 8, 64)) {
-                usbMounted_ = true;
-                return true;
-            }
-            // Partition erkannt, aber kein FAT darauf einhängbar: libfat einmal selbst suchen lassen.
-            if (!triedSimple) {
-                triedSimple = true;
-                if (fatMountSimple("usb", &__io_usbstorage)) {
-                    usbMounted_ = true;
-                    return true;
-                }
-            }
-            continue;
+        if (lba && *lba <= UINT32_MAX &&
+            fatMount("usb", &__io_usbstorage, static_cast<sec_t>(*lba), 8, 64)) {
+            usbMounted_ = true;
+            return true;
         }
-        // Lesbar, aber keine Partition erkannt (z. B. Superfloppy): libfat einmal selbst
-        // suchen lassen. Erneute Versuche ändern am Plattenlayout nichts.
+        // Lesbar, aber keine Partition erkannt (z. B. Superfloppy) oder kein FAT auf der
+        // erkannten LBA: libfat einmal selbst suchen lassen, dann aufhören.
         usbMounted_ = fatMountSimple("usb", &__io_usbstorage);
         return usbMounted_;
     }
