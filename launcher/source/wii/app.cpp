@@ -237,7 +237,9 @@ void App::collectActions(const InputState& in, const screens::Hit& hit, uint64_t
         //   Leere Panelfläche (nullopt) oder Hintergrund des Hauptbilds (Region::None ohne
         //   Overlay) -> gar nichts, auch kein Action::A.
         // - Zeiger ungültig: Action::A auf die Auswahl des Steuerkreuzes.
-        if (!in.pointerValid) {
+        // - Ausnahme "USB-Platte nicht gefunden" ohne Overlay: A ist immer Retry (der Bildschirm
+        //   verspricht "A: Erneut suchen"), egal wohin der Zeiger zeigt.
+        if (!in.pointerValid || (state_.noUsb && state_.overlay == Overlay::None)) {
             out.emplace_back(Action::A, std::nullopt);
         } else if (hit && (hit->first != static_cast<int>(Region::None) || state_.overlay != Overlay::None)) {
             out.emplace_back(Action::PointerClick, hit);
