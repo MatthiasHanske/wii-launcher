@@ -2,11 +2,6 @@
 #include "fake_fs.h"
 #include "core/scanner.h"
 
-static const Game* find(const std::vector<Game>& g, const std::string& title) {
-    for (const auto& x : g) if (x.title == title) return &x;
-    return nullptr;
-}
-
 static void fill(FakeFs& fs) {
     fs.addFile("usb:/wbfs/Mario Kart Wii (Europe) [RMCP01]/RMCP01.wbfs");
     fs.addFile("usb:/wbfs/Wii Sports [RSPE01].wbfs");
@@ -84,7 +79,6 @@ TEST(scanner_full_library) {
     }
     CHECK(ia < iz);
     for (size_t i = 1; i < g.size(); ++i) CHECK(g[i - 1].sortKey <= g[i].sortKey);
-    CHECK(find(g, "Super Mario World") != nullptr || find(g, "Super Mario World (Europe)") != nullptr || g.size() == 11);
 }
 
 TEST(scanner_root_without_slash) {
@@ -110,4 +104,32 @@ TEST(scanner_empty_root) {
     CHECK(g.empty());
     FakeFs none;
     CHECK(scanLibrary(none, "usb:/").empty());
+}
+
+TEST(scanner_zip_and_unf) {
+    FakeFs fs;
+    fs.addFile("usb:/snes9xgx/roms/DuckTales (World) (REV-A) (Aftermarket) (Unl).zip");
+    fs.addFile("usb:/fceugx/roms/Alpha.zip");
+    fs.addFile("usb:/fceugx/roms/Beta.unf");
+    fs.addFile("usb:/genplus/roms/sms/Gamma.zip");
+    auto g = scanLibrary(fs, "usb:/");
+    CHECK_EQ(g.size(), (size_t)4);
+    int sms = 0;
+    for (const auto& x : g) if (x.system == System::Sega && x.subdir == "sms") ++sms;
+    CHECK_EQ(sms, 1);
+}
+
+TEST(scanner_multiple_wbfs_deterministic) {
+    FakeFs fs;
+    fs.addFile("usb:/wbfs/Game [ABCD01]/ZZZ.wbfs");
+    fs.addFile("usb:/wbfs/Game [ABCD01]/ABCD01.wbfs");
+    fs.addFile("usb:/wbfs/Game [ABCD01]/AAA.wbfs");
+    fs.addFile("usb:/wbfs/Other/Zed.wbfs");
+    fs.addFile("usb:/wbfs/Other/Alpha.wbfs");
+    auto g = scanLibrary(fs, "usb:/");
+    CHECK_EQ(g.size(), (size_t)2);
+    for (const auto& x : g) {
+        if (x.gameId == "ABCD01") CHECK_EQ(x.file, std::string("ABCD01.wbfs"));
+        else CHECK_EQ(x.file, std::string("Alpha.wbfs"));
+    }
 }

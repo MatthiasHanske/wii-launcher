@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <initializer_list>
 
 #include "core/titles.h"
 
@@ -71,10 +72,14 @@ void scanWii(IFileSystem& fs, const std::string& root, std::vector<Game>& out) {
             std::vector<DirEntry> inner;
             if (!fs.listDir(sub, inner)) continue;
             std::string wbfs;
+            auto idInName = extractGameId(e.name);
+            std::string preferred = idInName ? *idInName + ".wbfs" : "";
             for (const auto& f : inner) {
                 std::string b, x;
                 splitExt(f.name, b, x);
-                if (!f.isDir && !hidden(f.name) && x == "wbfs") { wbfs = f.name; break; }
+                if (f.isDir || hidden(f.name) || x != "wbfs") continue;
+                if (f.name == preferred) { wbfs = f.name; break; }
+                if (wbfs.empty() || f.name < wbfs) wbfs = f.name;
             }
             if (wbfs.empty()) continue;
             fillTitle(g, e.name);
@@ -146,11 +151,11 @@ std::vector<Game> scanLibrary(IFileSystem& fs, const std::string& root) {
     scanWii(fs, root, out);
     scanGameCube(fs, root, out);
     scanRoms(fs, join(root, "not64/roms"), System::N64, "", {"z64", "n64", "v64"}, out);
-    scanRoms(fs, join(root, "snes9xgx/roms"), System::SNES, "", {"sfc", "smc"}, out);
-    scanRoms(fs, join(root, "fceugx/roms"), System::NES, "", {"nes"}, out);
-    scanRoms(fs, join(root, "genplus/roms/md"), System::Sega, "md", {"gen", "md", "smd", "bin"}, out);
-    scanRoms(fs, join(root, "genplus/roms/sms"), System::Sega, "sms", {"sms"}, out);
-    scanRoms(fs, join(root, "genplus/roms/sg"), System::Sega, "sg", {"sg"}, out);
+    scanRoms(fs, join(root, "snes9xgx/roms"), System::SNES, "", {"sfc", "smc", "zip"}, out);
+    scanRoms(fs, join(root, "fceugx/roms"), System::NES, "", {"nes", "unf", "zip"}, out);
+    scanRoms(fs, join(root, "genplus/roms/md"), System::Sega, "md", {"gen", "md", "smd", "bin", "zip"}, out);
+    scanRoms(fs, join(root, "genplus/roms/sms"), System::Sega, "sms", {"sms", "zip"}, out);
+    scanRoms(fs, join(root, "genplus/roms/sg"), System::Sega, "sg", {"sg", "zip"}, out);
     scanAdventure(fs, root, "scummvm", out);
     scanAdventure(fs, root, "dosbox", out);
 
