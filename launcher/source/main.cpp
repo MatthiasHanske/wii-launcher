@@ -7,6 +7,9 @@
 #include "core/model.h"
 #include "core/scanner.h"
 #include "wii/boot.h"
+#ifdef LAUNCHER_GFX_DEMO
+#include "wii/demo.h"
+#endif
 #include "wii/fs_wii.h"
 
 // Vorläufige Rauchtest-Anzeige (Task 7), bis es eine Schrift gibt:
@@ -61,6 +64,13 @@ LaunchPlan testPlanScummvm() {
 }  // namespace
 
 int main() {
+#ifdef LAUNCHER_GFX_DEMO
+    {
+        WiiFs demoFs;
+        runGfxDemo(demoFs);
+        return 0;
+    }
+#endif
     GRRLIB_Init();
     WPAD_Init();
 

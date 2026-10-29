@@ -28,6 +28,11 @@ INCLUDES	:=	source
 CFLAGS	= -g -O2 -Wall $(MACHDEP) $(INCLUDE)
 CXXFLAGS	=	$(CFLAGS) -std=gnu++17
 
+# make launcher LAUNCHER_GFX_DEMO=1 -> Grafik-Demo (wii/demo.cpp) statt Rauchtest-Anzeige
+ifneq ($(strip $(LAUNCHER_GFX_DEMO)),)
+CXXFLAGS	+=	-DLAUNCHER_GFX_DEMO
+endif
+
 LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map
 
 #---------------------------------------------------------------------------------
@@ -62,7 +67,8 @@ CFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
 CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
 sFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.S)))
-BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
+# Lizenztexte (*.txt) liegen nur daneben und werden nicht eingebunden.
+BINFILES	:=	$(filter-out %.txt,$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*))))
 
 #---------------------------------------------------------------------------------
 # use CXX for linking C++ projects, CC for standard C
@@ -138,6 +144,26 @@ $(OFILES_SOURCES) : $(HFILES)
 #---------------------------------------------------------------------------------
 	@echo $(notdir $<)
 	$(bin2o)
+
+#---------------------------------------------------------------------------------
+# Schrift und Logos (data/font.ttf, data/logo_*.png) -> font_ttf.h, logo_wii_png.h, ...
+#---------------------------------------------------------------------------------
+%.ttf.o	%_ttf.h :	%.ttf
+#---------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	$(bin2o)
+
+%.png.o	%_png.h :	%.png
+#---------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	$(bin2o)
+
+#---------------------------------------------------------------------------------
+# main.o neu bauen, wenn LAUNCHER_GFX_DEMO zwischen zwei Builds wechselt
+#---------------------------------------------------------------------------------
+# (main.o direkt löschen statt Zeitstempel vergleichen: make 3.81 rechnet in Sekunden)
+GFX_DEMO_FLAG := $(if $(strip $(LAUNCHER_GFX_DEMO)),1,0)
+$(shell [ "`cat gfx_demo.stamp 2>/dev/null`" = "$(GFX_DEMO_FLAG)" ] || { rm -f main.o; echo $(GFX_DEMO_FLAG) > gfx_demo.stamp; })
 
 -include $(DEPENDS)
 
