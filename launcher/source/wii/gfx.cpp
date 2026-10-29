@@ -179,7 +179,9 @@ void shutdown() {
 void beginFrame(uint32_t clearRgba) {
     // Jedes Bild neu setzen: GRRLIB_2dMode/3dMode (falls je benutzt) überschreiben sie.
     loadProjection();
-    GRRLIB_FillScreen(clearRgba);
+    // Nicht GRRLIB_FillScreen: das füllt nur bis fbWidth + 40 (680 logische px), bei 16:9
+    // (854 px) bliebe rechts ein schwarzer Streifen.
+    rect(-40, -40, static_cast<float>(gWidth) + 80, kHeight + 80, clearRgba);
 }
 
 void endFrame() {
