@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/fit.h"
 #include "core/library.h"
 #include "core/model.h"
 #include "core/ui_state.h"
@@ -41,10 +42,7 @@ constexpr int kSizeSmall = 14;
 
 constexpr float kSafe = 32;
 
-struct Rect {
-    float x = 0, y = 0, w = 0, h = 0;
-    bool contains(float px, float py) const { return px >= x && px < x + w && py >= y && py < y + h; }
-};
+using ::Rect;  // core/fit.h
 
 // Cover von der SD (TexCache) plus eingebettete Systemlogos. Pro Bild werden höchstens
 // kNewLoadsPerFrame Cover von der Karte geladen (weder im Cache noch als Fehlschlag gemerkt,
@@ -65,6 +63,8 @@ public:
     const Texture* logo(System s) const;
     // nullptr: kein Cover (pending = false) oder noch nicht geladen (pending = true).
     const Texture* cover(const Game& g, bool& pending);
+    // Cover nur, wenn es schon geladen ist (kein Kartenzugriff, zählt nicht als Benutzung).
+    const Texture* peek(const Game& g) const;
 
     void endFrame();  // nach gfx::endFrame()
     void forgetFailures();
@@ -92,7 +92,10 @@ struct MainLayout {
     TopBarLayout bar;
     float leftX = 0, leftW = 0, splitX = 0;
     float labelY = 0;
-    Rect carLeft, carCenter, carRight;          // Cover-Rechtecke
+    Rect carArea;                               // Vorschaufläche: Spaltenbreite x Vorschauhöhe
+    Rect carCenter;                             // Mittelcover, per fitRect in carArea eingepasst
+    Rect carLeft, carRight;                     // Rahmen der Seitencover (Cover darin eingepasst),
+                                                // leer, wenn die Mitte sie verdrängt
     Rect hitLeft, hitRight;                     // Klickflächen der Seitencover (volle Höhe)
     float titleY = 0, systemY = 0, hintsY = 0;
     float listX = 0, listW = 0;
@@ -103,7 +106,9 @@ struct MainLayout {
     int letterIndex[kLetterCells];              // Index in library.letters(), -1 = inaktiv
 };
 
-MainLayout mainLayout(const UiState& s, const Library& lib);
+// centerImgW/H: echte Bildgröße des Mittelcovers (Texture::w/h); 0 = kein Cover geladen,
+// dann hat die Mitte das Standardformat der Platzhalter-Kachel.
+MainLayout mainLayout(const UiState& s, const Library& lib, float centerImgW = 0, float centerImgH = 0);
 
 struct SystemsLayout {
     Rect panel;
@@ -138,7 +143,10 @@ NoUsbLayout noUsbLayout();
 // Nur die oberste Ebene: offenes Overlay -> dessen Regionen, außerhalb des Panels Region::None,
 // im Panel ohne Bedienelement nullopt. Hauptbild: Region::None, wenn nichts getroffen.
 // recent wie für carouselGame(): CarouselLeft/Right gibt es nur, wenn dort ein Spiel liegt.
-Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::vector<const Game*>& recent);
+// covers: für die Breite des Mittelcovers (nur bereits geladene, siehe Covers::peek); ohne
+// covers gilt das Standardformat.
+Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::vector<const Game*>& recent,
+            const Covers* covers = nullptr);
 
 // --- Zeichnen ------------------------------------------------------------------------------
 

@@ -167,7 +167,7 @@ void App::run() {
         uint64_t now = nowMs();
         InputState in = pollInput();
         screens::Hit hit;
-        if (in.pointerValid) hit = screens::hitTest(in.pointerX, in.pointerY, state_, *lib_, recent_);
+        if (in.pointerValid) hit = screens::hitTest(in.pointerX, in.pointerY, state_, *lib_, recent_, &covers_);
         // Hover nur bei Wechsel der Region, sonst überschreibt der ruhende Zeiger das Steuerkreuz.
         // Während der Fehlermeldung kein Hover (sie sperrt die Eingabe).
         if (in.pointerValid && hit != lastHit_ && now >= errorUntil_) pointerHover(state_, *lib_, hit);

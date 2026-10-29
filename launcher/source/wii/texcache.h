@@ -33,6 +33,12 @@ public:
     // kann. Fehlschläge werden gemerkt (kein erneuter Kartenzugriff in jedem Bild).
     const Texture* get(const std::string& path);
 
+    // Geladene Textur ohne Kartenzugriff und ohne sie als benutzt zu markieren; nullptr, wenn
+    // nicht im Cache. Zum Zeichnen get() verwenden (sonst könnte sie im Bild verdrängt werden).
+    const Texture* peek(const std::string& path) const {
+        auto it = entries_.find(path);
+        return it == entries_.end() ? nullptr : &it->second.tex;
+    }
     // Liegt path geladen im Cache (get() kostet dann keinen Kartenzugriff)?
     bool contains(const std::string& path) const { return entries_.count(path) != 0; }
     // Ist path als nicht ladbar gemerkt (get() liefert sofort nullptr)?
