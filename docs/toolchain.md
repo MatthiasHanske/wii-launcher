@@ -26,7 +26,7 @@ Pruefen: `bash tools/check-toolchain.sh`
 
 1. Pacman-Installer (pkg) ausfuehren, braucht Admin-Rechte.
 2. `sudo dkp-pacman -S --needed wii-dev libfat-ogc ppc-libpng ppc-freetype ppc-libjpeg-turbo ppc-zlib`
-3. `git clone --depth 1 https://github.com/GRRLIB/GRRLIB.git /tmp/GRRLIB && sudo make -C /tmp/GRRLIB/GRRLIB clean all install`
+3. `git clone https://github.com/GRRLIB/GRRLIB.git /tmp/GRRLIB && git -C /tmp/GRRLIB checkout a426e6170cbd9a4a69851a705637d753a09f8294 && sudo make -C /tmp/GRRLIB/GRRLIB clean all install` (voller Klon, damit der gepinnte Commit erreichbar ist)
 4. `brew install --cask dolphin`
 
 ## Upload auf die Wii
