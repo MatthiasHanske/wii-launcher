@@ -11,8 +11,10 @@ launcher: booter
 	cp -p booter/app_booter.bin launcher/data/app_booter.bin
 	$(MAKE) -C launcher
 
-forwarder:
-	@echo "forwarder: not yet"
+forwarder: booter
+	@mkdir -p forwarder/data
+	cp -p booter/app_booter.bin forwarder/data/app_booter.bin
+	$(MAKE) -C forwarder
 
 booter:
 	$(MAKE) -C booter
@@ -22,6 +24,7 @@ test:
 
 clean:
 	-$(MAKE) -C launcher clean
+	-$(MAKE) -C forwarder clean
 	-$(MAKE) -C booter clean
-	rm -f launcher/data/app_booter.bin
+	rm -f launcher/data/app_booter.bin forwarder/data/app_booter.bin
 	$(MAKE) -C tests clean
