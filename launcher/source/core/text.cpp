@@ -62,11 +62,28 @@ std::string ellipsize(const std::string& text, float maxWidth,
         i += decodeOne(text, i, cp);
         ends.push_back(i);
     }
-    for (size_t n = ends.size(); n-- > 0;) {
-        std::string head = text.substr(0, ends[n]);
+    // Größtes n (Anzahl Codepoints), für das trim(Präfix n) + "…" passt; n = 0 passt sicher.
+    auto candidate = [&](size_t n) {
+        std::string head = text.substr(0, n == 0 ? 0 : ends[n - 1]);
         while (!head.empty() && head.back() == ' ') head.pop_back();
-        std::string candidate = head + kEllipsis;
-        if (measure(candidate) <= maxWidth) return candidate;
+        return head + kEllipsis;
+    };
+    size_t lo = 0, hi = ends.size();  // text ganz (n = ends.size()) passt nicht
+    while (hi - lo > 1) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (measure(candidate(mid)) <= maxWidth) lo = mid;
+        else hi = mid;
     }
-    return kEllipsis;
+    return candidate(lo);
+}
+
+std::string EllipsizeMemo::get(const std::string& text, float maxWidth, int size,
+                               const std::function<float(const std::string&)>& measure) {
+    auto key = std::make_tuple(text, maxWidth, size);
+    auto it = memo_.find(key);
+    if (it != memo_.end()) return it->second;
+    if (memo_.size() >= maxEntries_) memo_.clear();
+    std::string result = ellipsize(text, maxWidth, measure);
+    memo_.emplace(std::move(key), result);
+    return result;
 }

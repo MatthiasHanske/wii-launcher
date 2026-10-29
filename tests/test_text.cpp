@@ -55,3 +55,58 @@ TEST(ellipsize_too_narrow_for_anything) {
     CHECK_EQ(ellipsize("Mario", 5.0f, tenPx), "");
     CHECK_EQ(ellipsize("Mario", 10.0f, tenPx), "\xE2\x80\xA6");
 }
+
+TEST(ellipsize_binary_search_few_measure_calls) {
+    std::string longText(200, 'x');
+    int calls = 0;
+    auto counting = [&calls](const std::string& s) { ++calls; return tenPx(s); };
+    std::string r = ellipsize(longText, 505.0f, counting);
+    CHECK_EQ(r, std::string(49, 'x') + "\xE2\x80\xA6");
+    // ganz + "…" + log2(200) ~ 8 Schritte, linear wären es 150
+    CHECK(calls <= 12);
+}
+
+TEST(ellipsize_binary_search_matches_linear_with_spaces) {
+    // monotone Suche muss trotz entfernter Leerzeichen das längste passende Präfix finden
+    const char* text = "a b c d e f g h";
+    for (int w = 0; w <= 160; w += 5) {
+        float maxW = static_cast<float>(w);
+        std::string want;
+        std::string s(text);
+        if (tenPx(s) <= maxW) {
+            want = s;
+        } else if (tenPx("\xE2\x80\xA6") <= maxW) {
+            want = "\xE2\x80\xA6";
+            for (size_t n = s.size(); n > 0; --n) {
+                std::string head = s.substr(0, n);
+                while (!head.empty() && head.back() == ' ') head.pop_back();
+                if (tenPx(head + "\xE2\x80\xA6") <= maxW) { want = head + "\xE2\x80\xA6"; break; }
+            }
+        }
+        CHECK_EQ(ellipsize(s, maxW, tenPx), want);
+    }
+}
+
+TEST(ellipsize_memo_hits_without_measuring) {
+    EllipsizeMemo memo;
+    int calls = 0;
+    auto counting = [&calls](const std::string& s) { ++calls; return tenPx(s); };
+    CHECK_EQ(memo.get("Zelda II", 50.0f, 14, counting), "Zeld\xE2\x80\xA6");
+    CHECK(calls > 0);
+    calls = 0;
+    CHECK_EQ(memo.get("Zelda II", 50.0f, 14, counting), "Zeld\xE2\x80\xA6");
+    CHECK_EQ(calls, 0);
+    CHECK_EQ(memo.size(), (size_t)1);
+    // andere Größe oder Breite ist ein eigener Eintrag
+    memo.get("Zelda II", 50.0f, 16, counting);
+    memo.get("Zelda II", 60.0f, 14, counting);
+    CHECK_EQ(memo.size(), (size_t)3);
+}
+
+TEST(ellipsize_memo_clears_when_full) {
+    EllipsizeMemo memo(512);
+    for (int i = 0; i < 512; ++i) memo.get("t" + std::to_string(i), 100.0f, 14, tenPx);
+    CHECK_EQ(memo.size(), (size_t)512);
+    memo.get("noch einer", 100.0f, 14, tenPx);
+    CHECK_EQ(memo.size(), (size_t)1);
+}
