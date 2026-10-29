@@ -64,6 +64,14 @@ Nach der Einrichtung diese Fälle einmal durchgehen und im Testprotokoll (`docs/
 | Reset gedrückt halten beim Einschalten | Priiloader-Menü |
 | SD-Karte entfernt, Wii einschalten | Hinweis "Launcher nicht gefunden auf SD ...", nach 5 s Homebrew Channel |
 
+### Notausgang
+
+Startet der Launcher nicht sauber (SD lässt sich nicht einhängen oder die Grafik startet nicht), zeigt er nichts an
+und springt mit dem Priiloader-Magic-Word sofort ins echte Wii-Menü, statt zu beenden; ein Beenden würde unter dem
+Autoboot wieder im Forwarder landen. Kommt die Wii trotzdem in eine Startschleife: Wii ausschalten, Reset gedrückt
+halten und einschalten. Dann erscheint das Priiloader-Menü, von dort "System Menu" starten oder unter "Settings" den
+Autoboot abschalten.
+
 ### Ohne SD-Karte
 
 Fehlt die SD-Karte, entsteht ein Kreislauf: Forwarder (Meldung, 5 s) → Homebrew Channel → beim Verlassen des HBC

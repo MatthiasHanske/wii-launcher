@@ -12,6 +12,5 @@ int main() {
         return 0;
     }
 #endif
-    app::run();
-    return 0;
+    app::run();  // kehrt nie zurück (siehe app.h)
 }

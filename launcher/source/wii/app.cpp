@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <ctime>
+#include <unistd.h>
 #include <memory>
 #include <string>
 #include <utility>
@@ -94,7 +95,7 @@ private:
 
 class App {
 public:
-    void run();
+    [[noreturn]] void run();
 
 private:
     void startup();
@@ -108,6 +109,7 @@ private:
     void handle(const Command& c);
     void launch(const Game& g);
     [[noreturn]] void leave(Command::Kind kind);
+    [[noreturn]] void abortToWiiMenu();
     void retryUsb();
 
     void animate(uint64_t now);
@@ -137,7 +139,12 @@ private:
 };
 
 void App::run() {
-    if (!gfx::init()) return;
+    // Ohne SD oder Grafik nichts anzeigen und sofort ins Wii-Menü (Priiloader-Magic). Ein
+    // Rücksprung aus main() führte unter Priiloader-Autoboot sonst in eine Startschleife.
+    // SD vor der Grafik, damit in diesem Fall kein Bild entsteht.
+    sdOk_ = fs_.mountSd();
+    if (!sdOk_) abortToWiiMenu();
+    if (!gfx::init()) abortToWiiMenu();
     startup();
 
     std::vector<std::pair<Action, screens::Hit>> actions;
@@ -187,7 +194,6 @@ void App::startup() {
     inputInit(gfx::width(), gfx::height());
     covers_.loadLogos();
 
-    sdOk_ = fs_.mountSd();
     std::string text;
     if (sdOk_ && fs_.readText(kSettingsPath, text)) settings_ = parseSettings(text);
     state_.systems = settings_.systems;
@@ -339,6 +345,14 @@ void App::leave(Command::Kind kind) {
     while (true) VIDEO_WaitVSync();
 }
 
+void App::abortToWiiMenu() {
+    fs_.unmountAll();
+    returnToWiiMenu();
+    // Nur bei Fehler hier.
+    powerOff();
+    while (true) usleep(100000);
+}
+
 void App::retryUsb() {
     messageFrame(std::string("Suche USB-Platte ") + kEllipsis);
     if (!fs_.mountUsb(3, 500)) return;
@@ -409,7 +423,7 @@ void App::fadeOut(const InputState* in) {
 
 }  // namespace
 
-void run() {
+[[noreturn]] void run() {
     // Groß (Covers, Library), daher nicht auf dem Stack.
     static App app;
     app.run();

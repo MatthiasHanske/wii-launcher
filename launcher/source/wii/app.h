@@ -2,8 +2,10 @@
 
 namespace app {
 
-// Ganzes Programm: Grafik und Wiimote starten, SD/USB einhängen, Spiele scannen, Hauptschleife.
-// Kehrt nur zurück, wenn die Grafik nicht startet (dann zurück zum Loader).
-void run();
+// Ganzes Programm: SD einhängen, Grafik und Wiimote starten, USB einhängen, Spiele scannen,
+// Hauptschleife. Kehrt nie zurück: Fehlen SD oder Grafik, geht es ohne Anzeige ins Wii-Menü
+// (Priiloader-Magic "Pune", kein erneuter Autoboot); sonst verlässt nur Home/Power/Reset
+// oder ein Spielstart das Programm.
+[[noreturn]] void run();
 
 }  // namespace app
