@@ -12,3 +12,4 @@ booter/app_booter.bin
 launcher/data/app_booter.bin
 forwarder/data/app_booter.bin
 __pycache__/
+.worktrees/
