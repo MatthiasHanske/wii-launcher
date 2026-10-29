@@ -1,5 +1,5 @@
 CXX      ?= c++
-CXXFLAGS := -std=c++17 -Wall -Wextra -I../launcher/source
+CXXFLAGS := -std=c++17 -Wall -Wextra -I../launcher/source -MMD -MP
 SRCS     := $(wildcard *.cpp) $(wildcard ../launcher/source/core/*.cpp)
 OBJS     := $(SRCS:.cpp=.o)
 
@@ -14,5 +14,7 @@ run_tests: $(OBJS)
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
+-include $(OBJS:.o=.d)
+
 clean:
-	rm -f run_tests $(OBJS)
+	rm -f run_tests $(OBJS) $(OBJS:.o=.d)
