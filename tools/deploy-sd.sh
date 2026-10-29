@@ -106,4 +106,24 @@ note "entfernt  $N AppleDouble-Datei(en)"
 echo
 if [ "$DRY" = 1 ]; then echo "Zusammenfassung (dry-run, nichts geschrieben):"; else echo "Zusammenfassung:"; fi
 printf '  %s\n' "${SUMMARY[@]}"
+
+# Zielprogramme aus launcher/source/core/launch.cpp: nur warnen, nicht abbrechen.
+TARGETS=(
+  apps/usbloader_gx/boot.dol
+  apps/not64/boot.dol
+  apps/snes9xgx/boot.dol
+  apps/fceugx/boot.dol
+  apps/genplus-gx/boot.dol
+  apps/scummvm/boot.elf
+  apps/dosbox-wii/boot.dol
+)
+MISSING=()
+for t in "${TARGETS[@]}"; do
+  [ -f "$SD/$t" ] || MISSING+=("$t")
+done
+if [ "${#MISSING[@]}" -gt 0 ]; then
+  echo
+  echo "Warnung: diese Startprogramme fehlen auf der SD (Spiele dieser Systeme starten nicht):"
+  printf '  %s\n' "${MISSING[@]}"
+fi
 echo "Die SD wird nicht ausgeworfen."
