@@ -1,5 +1,6 @@
 #pragma once
-// Wiimote auf Kanal 0 mit IR-Zeiger (Nunchuk und weitere Kanäle werden ignoriert).
+// Bis zu vier Wiimotes (Kanäle 0..3) mit IR-Zeiger; Knöpfe aller Kanäle werden ODER-verknüpft,
+// der Zeiger kommt vom ersten Kanal mit gültigem IR. Nunchuk wird ignoriert.
 // pressed/held enthalten immer nur die Knöpfe der Wiimote selbst (kWiimoteButtons); Bits
 // von Erweiterungen (Nunchuk C/Z, Classic Controller) werden auch dann ausgeblendet, wenn
 // ein Classic Controller steckt. Soll der später bedienen, gehört das hier ergänzt.
@@ -16,8 +17,8 @@ struct InputState {
     uint32_t held = 0;     // WPAD_BUTTON_* gerade gehalten
 };
 
-// Nach WPAD_Init: Datenformat mit IR und die Zeigerauflösung setzen (logische Größe).
+// Nach WPAD_Init: Datenformat mit IR und die Zeigerauflösung für Kanäle 0..3 setzen (logische Größe).
 void inputInit(int width, int height);
 
-// WPAD_ScanPads und Zustand von Kanal 0 lesen. Einmal pro Bild aufrufen.
+// WPAD_ScanPads und Zustand der Kanäle 0..3 lesen. Einmal pro Bild aufrufen.
 InputState pollInput();
