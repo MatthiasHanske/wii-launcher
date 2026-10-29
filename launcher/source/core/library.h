@@ -27,6 +27,7 @@ public:
     Library& operator=(const Library&) = delete;
 
     void setEnabled(const SystemSet& s);
+    const SystemSet& enabled() const { return enabled_; }
     std::vector<System> tabs() const;                 // aktivierte Systeme, Enum-Reihenfolge
     void setTab(std::optional<System> tab);           // nullopt = Alle
     const std::vector<const Game*>& visible() const { return visible_; }

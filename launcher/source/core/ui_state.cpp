@@ -72,8 +72,12 @@ void selectTab(UiState& s, Library& lib, int index) {
     s.carouselPreview = nullptr;
 }
 
+// Mit aktiver Vorschau loescht der erste Schritt nur die Vorschau, Index bleibt.
 void moveCarousel(UiState& s, const std::vector<const Game*>& recent, const Library& lib, int delta) {
-    s.carouselPreview = nullptr;
+    if (s.carouselPreview) {
+        s.carouselPreview = nullptr;
+        return;
+    }
     s.carouselIndex = clampi(s.carouselIndex + delta, 0, carouselCount(recent, lib) - 1);
 }
 
@@ -136,8 +140,7 @@ void typeKey(UiState& s, int index) {
     const auto& keys = keyboardKeys();
     if (index < 0 || index >= static_cast<int>(keys.size())) return;
     s.keyboardIndex = index;
-    s.searchInResults = false;
-    s.resultIndex = 0;
+    s.searchInResults = false;  // resultIndex bleibt, normalize() klemmt ihn auf die neuen Treffer
     const std::string& k = keys[index];
     if (index == static_cast<int>(keys.size()) - 1) {  // Löschen
         if (!s.query.empty()) s.query.pop_back();       // Eingabe ist reines ASCII
@@ -241,8 +244,21 @@ Command applySearch(UiState& s, const Library& lib, Action a) {
         return Command();
     }
     switch (a) {
+        case Action::Down: {
+            int row, col;
+            keyPos(s.keyboardIndex, row, col);
+            if (row < static_cast<int>(keyboardRows().size()) - 1) {
+                moveKeyboard(s, a);
+                break;
+            }
+            // unterste Reihe (Leer/Löschen): weiter in die Treffer wie Two
+            if (n > 0) {
+                s.searchInResults = true;
+                s.resultIndex = 0;
+            }
+            break;
+        }
         case Action::Up:
-        case Action::Down:
         case Action::Left:
         case Action::Right: moveKeyboard(s, a); break;
         case Action::A: typeKey(s, s.keyboardIndex); break;
@@ -297,12 +313,9 @@ Command applyMain(UiState& s, Library& lib, const std::vector<const Game*>& rece
                     if (s.listIndex % Library::kPageSize == 0) s.focus = Focus::Tabs;
                     else selectList(s, lib, s.listIndex - 1);
                     break;
-                case Action::Down: {
-                    int next = s.listIndex + 1;
-                    if (next < n && next / Library::kPageSize == s.listIndex / Library::kPageSize)
-                        selectList(s, lib, next);
+                case Action::Down:  // letzte Zeile einer Seite -> naechste Seite, Zeile 0
+                    if (s.listIndex + 1 < n) selectList(s, lib, s.listIndex + 1);
                     break;
-                }
                 case Action::Left:
                     syncLetterToList(s, lib);
                     s.focus = Focus::Letters;
@@ -441,10 +454,25 @@ Command apply(UiState& s, Library& library, const std::vector<const Game*>& rece
               std::optional<std::pair<int, int>> pointerHit) {
     normalize(s, library, recent);
     Command c;
+    if (s.noUsb && s.overlay == Overlay::None) {
+        // Fehlerbildschirm: A = Retry, Home oeffnet das Home-Menue, Retry-Klick, sonst nichts.
+        if (a == Action::A) {
+            c = simple(Command::Retry);
+        } else if (a == Action::Home) {
+            openOverlay(s, Overlay::Home);
+        } else if (a == Action::PointerClick && pointerHit &&
+                   pointerHit->first == static_cast<int>(Region::Retry)) {
+            c = simple(Command::Retry);
+        }
+        normalize(s, library, recent);
+        return c;
+    }
     if (a == Action::PointerClick) {
         if (pointerHit && pointerHit->first >= 0 && pointerHit->first <= static_cast<int>(Region::Retry))
             c = applyClick(s, library, recent, static_cast<Region>(pointerHit->first), pointerHit->second);
     } else if (a == Action::Home) {
+        // Home ersetzt jedes andere Overlay (z.B. Suche); B schliesst dann zum Hauptbildschirm,
+        // nicht zurueck ins vorige Overlay.
         if (s.overlay == Overlay::Home) s.overlay = Overlay::None;
         else openOverlay(s, Overlay::Home);
     } else {

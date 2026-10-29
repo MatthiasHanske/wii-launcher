@@ -25,7 +25,8 @@ struct UiState {
     int homeIndex = 0;       // in homeEntries()
     int systemsIndex = 0;    // System als int, Enum-Reihenfolge
     const Game* carouselPreview = nullptr;  // in der Liste angewaehltes Spiel
-    SystemSet systems = SystemSet::defaults();  // Kopie, Library gibt ihr Set nicht heraus
+    SystemSet systems = SystemSet::defaults();  // Quelle fuer library.setEnabled()
+    bool noUsb = false;  // "USB nicht gefunden": nur A (-> Retry), Home und Retry-Klick wirken
 };
 
 enum class Action { Up, Down, Left, Right, A, B, Plus, Minus, One, Two, Home, PointerClick };
@@ -37,7 +38,8 @@ enum class Region {
     CarouselLeft,    // Index egal
     CarouselCenter,  // Index egal
     CarouselRight,   // Index egal
-    ListRow,         // Index: Zeile 0..9 auf der aktuellen Seite
+    ListRow,         // Index: Zeile 0..9 auf der aktuellen Seite. Klick auf die bereits gewaehlte
+                     // Zeile (Fokus Liste, per Hover oder Steuerkreuz) startet sofort, sonst nur Auswahl.
     Letter,          // Index in library.letters()
     SearchField,     // Index egal
     Key,             // Index in keyboardKeys()

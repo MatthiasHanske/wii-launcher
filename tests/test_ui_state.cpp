@@ -137,15 +137,20 @@ TEST(ui_list_up_on_first_row_goes_to_tabs) {
     CHECK(s.focus == Focus::Tabs);
 }
 
-TEST(ui_list_down_stays_on_page_and_at_end) {
+TEST(ui_list_down_crosses_page_and_stops_at_end) {
     Library lib(uiFixture());  // Alle: 17 Spiele -> Seiten 10 + 7
     UiState s;
     s.focus = Focus::List;
-    for (int i = 0; i < 15; ++i) press(s, lib, kNoRecent, Action::Down);
+    for (int i = 0; i < 9; ++i) press(s, lib, kNoRecent, Action::Down);
     CHECK_EQ(s.listIndex, 9);
+    press(s, lib, kNoRecent, Action::Down);  // letzte Zeile Seite 1 -> Seite 2, Zeile 0
+    CHECK_EQ(s.listIndex, 10);
+    CHECK(s.carouselPreview == lib.visible()[10]);
+    for (int i = 0; i < 20; ++i) press(s, lib, kNoRecent, Action::Down);
+    CHECK_EQ(s.listIndex, 16);
+    press(s, lib, kNoRecent, Action::One);
+    CHECK_EQ(s.listIndex, 6);
     press(s, lib, kNoRecent, Action::Two);
-    CHECK_EQ(s.listIndex, 16);  // Zeile 9 gibt es auf Seite 2 nicht -> letzter Eintrag
-    press(s, lib, kNoRecent, Action::Down);
     CHECK_EQ(s.listIndex, 16);
 }
 
@@ -457,4 +462,164 @@ TEST(ui_out_of_range_pointer_ignored) {
     CHECK(s.focus == Focus::Carousel);
     Command c = apply(s, lib, kNoRecent, Action::PointerClick, std::make_pair(999, 0));
     CHECK_EQ(c.kind, Command::None);
+}
+
+TEST(ui_pointer_hover_then_click_same_row_launches) {
+    Library lib(uiFixture());
+    UiState s;
+    pointerHover(s, lib, std::make_pair(static_cast<int>(Region::ListRow), 3));
+    Command c = click(s, lib, kNoRecent, Region::ListRow, 3);
+    CHECK_EQ(c.kind, Command::Launch);
+    CHECK(c.game == lib.visible()[3]);
+}
+
+TEST(ui_pointer_hover_then_click_other_row_selects) {
+    Library lib(uiFixture());
+    UiState s;
+    pointerHover(s, lib, std::make_pair(static_cast<int>(Region::ListRow), 3));
+    Command c = click(s, lib, kNoRecent, Region::ListRow, 5);
+    CHECK_EQ(c.kind, Command::None);
+    CHECK_EQ(s.listIndex, 5);
+}
+
+TEST(ui_no_usb_only_retry_and_home) {
+    Library lib(uiFixture());
+    const Focus focuses[] = {Focus::Tabs, Focus::Carousel, Focus::List, Focus::Letters};
+    for (Focus f : focuses) {
+        UiState s;
+        s.noUsb = true;
+        s.focus = f;
+        CHECK_EQ(press(s, lib, kNoRecent, Action::A).kind, Command::Retry);
+    }
+    UiState s;
+    s.noUsb = true;
+    s.focus = Focus::List;
+    const Action ignored[] = {Action::Up, Action::Down, Action::Left, Action::Right, Action::B,
+                              Action::Plus, Action::Minus, Action::One, Action::Two};
+    for (Action a : ignored) {
+        CHECK_EQ(press(s, lib, kNoRecent, a).kind, Command::None);
+        CHECK(s.overlay == Overlay::None);
+        CHECK(s.focus == Focus::List);
+        CHECK_EQ(s.listIndex, 0);
+        CHECK_EQ(s.tabIndex, 0);
+    }
+    CHECK_EQ(click(s, lib, kNoRecent, Region::ListRow, 2).kind, Command::None);
+    CHECK_EQ(s.listIndex, 0);
+    CHECK_EQ(click(s, lib, kNoRecent, Region::Retry, 0).kind, Command::Retry);
+    press(s, lib, kNoRecent, Action::Home);
+    CHECK(s.overlay == Overlay::Home);
+    press(s, lib, kNoRecent, Action::Down);
+    CHECK_EQ(press(s, lib, kNoRecent, Action::A).kind, Command::Hbc);
+    press(s, lib, kNoRecent, Action::B);
+    CHECK(s.overlay == Overlay::None);
+    CHECK_EQ(press(s, lib, kNoRecent, Action::A).kind, Command::Retry);
+}
+
+TEST(ui_carousel_first_step_clears_preview) {
+    Library lib(uiFixture());
+    std::vector<const Game*> recent = {lib.visible()[5], lib.visible()[2], lib.visible()[7]};
+    UiState s;
+    s.focus = Focus::List;
+    press(s, lib, recent, Action::Down);
+    CHECK(s.carouselPreview == lib.visible()[1]);
+    press(s, lib, recent, Action::Right);  // Fokus Karussell
+    CHECK(s.focus == Focus::Carousel);
+    press(s, lib, recent, Action::Right);
+    CHECK(s.carouselPreview == nullptr);
+    CHECK_EQ(s.carouselIndex, 0);
+    CHECK(carouselGame(s, recent, lib) == recent[0]);
+    press(s, lib, recent, Action::Right);
+    CHECK_EQ(s.carouselIndex, 1);
+    // Gleiches mit Links
+    s.focus = Focus::List;
+    press(s, lib, recent, Action::Down);
+    s.focus = Focus::Carousel;
+    press(s, lib, recent, Action::Left);
+    CHECK(s.carouselPreview == nullptr);
+    CHECK_EQ(s.carouselIndex, 1);
+}
+
+TEST(ui_keyboard_down_from_bottom_row_enters_results) {
+    Library lib(uiFixture());
+    UiState s;
+    press(s, lib, kNoRecent, Action::Minus);
+    s.keyboardIndex = keyIndex("Leer");
+    press(s, lib, kNoRecent, Action::Down);  // keine Treffer: bleibt
+    CHECK(!s.searchInResults);
+    CHECK_EQ(s.keyboardIndex, keyIndex("Leer"));
+    s.query = "mar";
+    s.keyboardIndex = keyIndex("L\xc3\xb6schen");
+    press(s, lib, kNoRecent, Action::Down);
+    CHECK(s.searchInResults);
+    CHECK_EQ(s.resultIndex, 0);
+}
+
+TEST(ui_systems_agree_with_library) {
+    Library lib(uiFixture());
+    UiState s;
+    lib.setEnabled(s.systems);
+    press(s, lib, kNoRecent, Action::Plus);
+    click(s, lib, kNoRecent, Region::SystemToggle, static_cast<int>(System::NES));
+    click(s, lib, kNoRecent, Region::SystemToggle, static_cast<int>(System::Wii));
+    press(s, lib, kNoRecent, Action::Down);
+    press(s, lib, kNoRecent, Action::A);
+    for (int i = 0; i < 7; ++i) CHECK_EQ(s.systems.enabled[i], lib.enabled().enabled[i]);
+    CHECK(s.systems.get(System::NES));
+    CHECK(!s.systems.get(System::Wii));
+}
+
+TEST(ui_tab_renumbered_when_earlier_system_disabled) {
+    Library lib(uiFixture());
+    UiState s;
+    click(s, lib, kNoRecent, Region::Tab, 3);  // Alle, Wii, GameCube, N64
+    CHECK_EQ(s.tabIndex, 3);
+    press(s, lib, kNoRecent, Action::Plus);
+    click(s, lib, kNoRecent, Region::SystemToggle, static_cast<int>(System::GameCube));
+    CHECK_EQ(s.tabIndex, 2);  // Alle, Wii, N64
+    CHECK(lib.tabs()[s.tabIndex - 1] == System::N64);
+    CHECK_EQ(lib.visible().size(), (size_t)5);
+}
+
+TEST(ui_result_index_clamps_when_results_shrink) {
+    Library lib(uiFixture());
+    UiState s;
+    press(s, lib, kNoRecent, Action::Minus);
+    s.query = "mario";
+    size_t before = searchResults(s, lib).size();
+    CHECK(before > 2);
+    press(s, lib, kNoRecent, Action::Two);
+    for (size_t i = 0; i < before; ++i) press(s, lib, kNoRecent, Action::Down);
+    CHECK_EQ(s.resultIndex, (int)before - 1);
+    click(s, lib, kNoRecent, Region::Key, keyIndex("Leer"));
+    click(s, lib, kNoRecent, Region::Key, keyIndex("k"));
+    size_t after = searchResults(s, lib).size();
+    CHECK(after > 0 && after < before);
+    CHECK_EQ(s.resultIndex, (int)after - 1);
+    // Loeschen im Treffer-Modus (per Zeiger) laesst den Index gueltig
+    press(s, lib, kNoRecent, Action::Two);
+    click(s, lib, kNoRecent, Region::Key, keyIndex("L\xc3\xb6schen"));
+    CHECK(s.resultIndex >= 0 && s.resultIndex < (int)searchResults(s, lib).size());
+}
+
+// Home ersetzt die Suche; B schliesst Home zum Hauptbildschirm, nicht zurueck in die Suche.
+TEST(ui_home_from_search_then_b_returns_to_main) {
+    Library lib(uiFixture());
+    UiState s;
+    press(s, lib, kNoRecent, Action::Minus);
+    press(s, lib, kNoRecent, Action::Home);
+    CHECK(s.overlay == Overlay::Home);
+    press(s, lib, kNoRecent, Action::B);
+    CHECK(s.overlay == Overlay::None);
+}
+
+TEST(ui_click_none_closes_overlay) {
+    Library lib(uiFixture());
+    UiState s;
+    const Action openers[] = {Action::Plus, Action::Minus, Action::Home};
+    for (Action o : openers) {
+        press(s, lib, kNoRecent, o);
+        CHECK(s.overlay != Overlay::None);
+        CHECK_EQ(click(s, lib, kNoRecent, Region::None, 0).kind, Command::None);
+        CHECK(s.overlay == Overlay::None);
+    }
 }
