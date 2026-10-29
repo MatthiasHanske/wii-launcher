@@ -99,3 +99,37 @@ TEST(gpt_skips_unused_gpt_entries) {
     CHECK(r.has_value());
     CHECK_EQ(r.value_or(0), (uint64_t)4096);
 }
+
+namespace {
+// Typ-GUIDs im On-Disk-Format (gemischtes Endian).
+const uint8_t kEspGuid[16] = {0x28, 0x73, 0x2A, 0xC1, 0x1F, 0xF8, 0xD2, 0x11,
+                              0xBA, 0x4B, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B};
+const uint8_t kMsrGuid[16] = {0x16, 0xE3, 0xC9, 0xE3, 0x5C, 0x0B, 0xB8, 0x4D,
+                              0x81, 0x7D, 0xF9, 0x2D, 0xF0, 0x02, 0x15, 0xAE};
+
+void setGptType(Disk& d, int idx, const uint8_t* guid) {
+    for (int i = 0; i < 16; ++i) d.entries[idx * 128 + i] = guid[i];
+}
+}  // namespace
+
+TEST(gpt_skips_efi_system_partition) {
+    Disk d;  // typisches macOS-Layout: ESP ab 40, Daten ab 409640
+    setMbrEntry(d, 0, 0xEE, 1);
+    setGptHeader(d);
+    setGptEntry(d, 0, 40);
+    setGptType(d, 0, kEspGuid);
+    setGptEntry(d, 1, 409640);
+    auto r = find(d);
+    CHECK_EQ(r.value_or(0), (uint64_t)409640);
+}
+
+TEST(gpt_skips_microsoft_reserved_partition) {
+    Disk d;  // typisches Windows-Layout: MSR ab 34, Daten ab 32768
+    setMbrEntry(d, 0, 0xEE, 1);
+    setGptHeader(d);
+    setGptEntry(d, 0, 34);
+    setGptType(d, 0, kMsrGuid);
+    setGptEntry(d, 1, 32768);
+    auto r = find(d);
+    CHECK_EQ(r.value_or(0), (uint64_t)32768);
+}
