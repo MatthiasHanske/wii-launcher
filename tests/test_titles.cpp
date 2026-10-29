@@ -47,6 +47,27 @@ TEST(sortKey_cases) {
     CHECK_EQ(sortKey("Der Gro\xC3\x9F" "e \xC3\x84rger"), "grossearger");
 }
 
+TEST(sortKey_folds_accents) {
+    CHECK_EQ(sortKey("Pok\xC3\xA9mon Snap"), "pokemonsnap");
+    CHECK_EQ(sortKey("\xC3\x89l\xC3\xA8ve \xC3\xAAtre"), "eleveetre");
+    CHECK_EQ(sortKey("Espa\xC3\xB1" "a Fran\xC3\xA7" "ais \xC3\xA0 \xC3\xA2"), "espanafrancaisaa");
+}
+
+TEST(searchKey_cases) {
+    CHECK_EQ(searchKey("Benjamin Bl\xC3\xBC" "mchen"), "benjamin blumchen");
+    CHECK_EQ(searchKey("Tony Hawk's Pro Skater 2"), "tony hawks pro skater 2");
+    CHECK_EQ(searchKey("Tony Hawk\xE2\x80\x99s"), "tony hawks");
+    CHECK_EQ(searchKey("  Super   Mario Bros.  "), "super mario bros");
+    CHECK_EQ(searchKey("Banjo-Kazooie"), "banjo kazooie");
+    CHECK_EQ(searchKey("Der Gro\xC3\x9F" "e \xC3\x84rger"), "der grosse arger");
+    CHECK_EQ(searchKey("\xC3\x96L \xC3\x9C" "BER"), "ol uber");
+    CHECK_EQ(searchKey("Pok\xC3\xA9mon \xC3\xA8\xC3\xAA \xC3\xA0\xC3\xA2 \xC3\xB1 \xC3\xA7"), "pokemon ee aa n c");
+    CHECK_EQ(searchKey("101-in-1 Party"), "101 in 1 party");
+    CHECK_EQ(searchKey("Die drei ???"), "die drei");
+    CHECK_EQ(searchKey("???"), "");
+    CHECK_EQ(searchKey(""), "");
+}
+
 TEST(indexLetter_cases) {
     CHECK_EQ(indexLetter("The Sims 3"), 'S');
     CHECK_EQ(indexLetter("101-in-1 Party Megamix"), '#');

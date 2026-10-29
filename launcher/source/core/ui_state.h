@@ -58,9 +58,9 @@ struct Command {
 constexpr int kSearchResultLimit = 8;
 constexpr size_t kMaxQueryLength = 32;
 
-// QWERTZ: "q".."p" | "a".."l" | "y".."m" | "Leer" "Löschen" (UTF-8), flach.
+// Ziffern + QWERTZ: "1".."0" | "q".."p" | "a".."l" | "y".."m" | "Leer" "Löschen" (UTF-8), flach.
 const std::vector<std::string>& keyboardKeys();
-// Tastenanzahl je Reihe: {10, 9, 7, 2}; Reihen liegen in keyboardKeys() hintereinander.
+// Tastenanzahl je Reihe: {10, 10, 9, 7, 2}; Reihen liegen in keyboardKeys() hintereinander.
 const std::vector<int>& keyboardRows();
 // "Wii-Menü", "Homebrew Channel", "Ausschalten" (UTF-8).
 const std::vector<std::string>& homeEntries();

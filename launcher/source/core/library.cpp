@@ -3,13 +3,13 @@
 #include <algorithm>
 #include <utility>
 
-namespace {
-char lower(char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c; }
-}
+#include "core/titles.h"
 
 Library::Library(std::vector<Game> games) : games_(std::move(games)) {
     std::stable_sort(games_.begin(), games_.end(),
                      [](const Game& a, const Game& b) { return a.sortKey < b.sortKey; });
+    searchKeys_.reserve(games_.size());
+    for (const Game& g : games_) searchKeys_.push_back(searchKey(g.title));
     rebuild();
 }
 
@@ -59,15 +59,13 @@ int Library::firstIndexForLetter(char c) const {
 
 std::vector<const Game*> Library::search(const std::string& query, size_t limit) const {
     std::vector<const Game*> out;
-    if (query.empty() || limit == 0) return out;
-    std::string q = query;
-    for (char& c : q) c = lower(c);
-    std::string t;
-    for (const Game& g : games_) {
+    if (limit == 0) return out;
+    std::string q = searchKey(query);
+    if (q.empty()) return out;
+    for (size_t i = 0; i < games_.size(); ++i) {
+        const Game& g = games_[i];
         if (!enabled_.get(g.system)) continue;
-        t.assign(g.title);
-        for (char& c : t) c = lower(c);
-        if (t.find(q) != std::string::npos) {
+        if (searchKeys_[i].find(q) != std::string::npos) {
             out.push_back(&g);
             if (out.size() >= limit) break;
         }

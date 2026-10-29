@@ -303,19 +303,22 @@ SearchLayout searchLayout(const UiState& s, const Library& lib) {
     const float x = std::round((W() - w) / 2), y = kSafe;
     l.field = Rect{x + 16, y + 16, w - 32, 36};
 
-    const float key = 32, step = 36;
+    // Fünf Tastenreihen (Ziffern, QWERTZ, Leer/Löschen) plus 8 Treffer: Panel endet bei
+    // kSafe + 416 = 448 = kBottom (Rechnung: 60 + 5 * 32 - 4 + 12 + 8 * 22 + 12).
+    const float key = 28, step = 32;
     const float kbW = 10 * step - 4;
     const float kbX = std::round(x + (w - kbW) / 2);
-    const float ky = y + 64;
-    const float rowOffset[3] = {0, 18, 36};
+    const float ky = y + 60;
+    const float rowOffset[4] = {0, 0, 16, 32};  // Ziffern, q-, a-, y-Reihe
     const auto& rows = keyboardRows();
+    const size_t last = rows.size() - 1;
     for (size_t r = 0; r < rows.size(); ++r) {
         float ry = ky + r * step;
-        if (r < 3) {
+        if (r < last && r < 4) {
             for (int c = 0; c < rows[r]; ++c) l.keys.push_back(Rect{kbX + rowOffset[r] + c * step, ry, key, key});
         } else {  // Leer, Löschen
-            l.keys.push_back(Rect{kbX + 18, ry, 200, key});
-            l.keys.push_back(Rect{kbX + 18 + 204, ry, kbW - 18 - 204, key});
+            l.keys.push_back(Rect{kbX + 16, ry, 180, key});
+            l.keys.push_back(Rect{kbX + 16 + 184, ry, kbW - 16 - 184, key});
         }
     }
     l.resultsY = ky + rows.size() * step - 4 + 12;

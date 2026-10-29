@@ -34,6 +34,8 @@ public:
     const std::vector<const Game*>& visible() const { return visible_; }
     std::vector<char> letters() const;                // '#' zuerst, dann A..Z
     int firstIndexForLetter(char c) const;            // -1 wenn keiner
+    // Teilstring-Suche ueber searchKey(query) in searchKey(title), alle aktivierten Systeme,
+    // unabhaengig vom Tab. "blum" findet "Benjamin Bluemchen", "tony hawks" findet "Tony Hawk's".
     std::vector<const Game*> search(const std::string& query, size_t limit) const;
     int pageCount() const;
     std::vector<const Game*> page(int index) const;
@@ -42,6 +44,7 @@ private:
     void rebuild();
 
     std::vector<Game> games_;  // sortiert nach sortKey, wird nie umallokiert
+    std::vector<std::string> searchKeys_;  // searchKey(games_[i].title)
     SystemSet enabled_ = SystemSet::defaults();
     std::optional<System> tab_;
     std::vector<const Game*> visible_;

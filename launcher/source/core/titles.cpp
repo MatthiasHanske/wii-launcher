@@ -1,5 +1,6 @@
 #include "core/titles.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <vector>
 
@@ -118,6 +119,62 @@ std::string moveArticle(const std::string& s) {
     return s;
 }
 
+// Zweites Byte einer UTF-8-Sequenz C3 xx (U+00C0..U+00FF) auf ASCII falten, nullptr = unbekannt.
+const char* foldC3(unsigned char d) {
+    switch (d) {
+        case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: case 0x85:  // A-Varianten
+        case 0xA0: case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xA5: return "a";
+        case 0x87: case 0xA7: return "c";
+        case 0x88: case 0x89: case 0x8A: case 0x8B:
+        case 0xA8: case 0xA9: case 0xAA: case 0xAB: return "e";
+        case 0x8C: case 0x8D: case 0x8E: case 0x8F:
+        case 0xAC: case 0xAD: case 0xAE: case 0xAF: return "i";
+        case 0x91: case 0xB1: return "n";
+        case 0x92: case 0x93: case 0x94: case 0x95: case 0x96:
+        case 0xB2: case 0xB3: case 0xB4: case 0xB5: case 0xB6: return "o";
+        case 0x99: case 0x9A: case 0x9B: case 0x9C:
+        case 0xB9: case 0xBA: case 0xBB: case 0xBC: return "u";
+        case 0x9F: return "ss";
+        default: return nullptr;
+    }
+}
+
+// Laenge einer UTF-8-Sequenz anhand des ersten Bytes (kaputte Bytes zaehlen als 1).
+size_t utf8Length(unsigned char c) {
+    if (c >= 0xF0 && c < 0xF8) return 4;
+    if (c >= 0xE0) return 3;
+    if (c >= 0xC0) return 2;
+    return 1;
+}
+
+// Gemeinsamer Kern von sortKey und searchKey: klein, gefaltet, nur a-z0-9; alles andere wird
+// zu ' ' (separator) oder entfaellt (Apostrophe ' ` und U+2018/U+2019).
+std::string foldAscii(const std::string& s) {
+    std::string out;
+    for (size_t i = 0; i < s.size();) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        if (c < 0x80) {
+            ++i;
+            if (c >= 'A' && c <= 'Z') out += static_cast<char>(c - 'A' + 'a');
+            else if ((c >= 'a' && c <= 'z') || isDigit(static_cast<char>(c))) out += static_cast<char>(c);
+            else if (c != '\'' && c != '`') out += ' ';
+            continue;
+        }
+        size_t n = std::min(utf8Length(c), s.size() - i);
+        if (n == 2 && c == 0xC3) {
+            const char* f = foldC3(static_cast<unsigned char>(s[i + 1]));
+            out += f ? f : " ";
+        } else if (n == 3 && c == 0xE2 && static_cast<unsigned char>(s[i + 1]) == 0x80 &&
+                   (static_cast<unsigned char>(s[i + 2]) == 0x98 || static_cast<unsigned char>(s[i + 2]) == 0x99)) {
+            // typografische Apostrophe: entfallen
+        } else {
+            out += ' ';
+        }
+        i += n;
+    }
+    return out;
+}
+
 }  // namespace
 
 std::string cleanTitle(const std::string& raw) {
@@ -140,23 +197,12 @@ std::string sortKey(const std::string& title) {
         if (startsWith(s, a)) { s.erase(0, 4); break; }
     }
     std::string out;
-    for (size_t i = 0; i < s.size(); ++i) {
-        unsigned char c = static_cast<unsigned char>(s[i]);
-        if ((c >= 'a' && c <= 'z') || isDigit(static_cast<char>(c))) {
-            out += static_cast<char>(c);
-        } else if (c == 0xC3 && i + 1 < s.size()) {
-            unsigned char d = static_cast<unsigned char>(s[++i]);
-            switch (d) {
-                case 0xA4: case 0x84: out += 'a'; break;  // ae/Ae
-                case 0xB6: case 0x96: out += 'o'; break;  // oe/Oe
-                case 0xBC: case 0x9C: out += 'u'; break;  // ue/Ue
-                case 0x9F: out += "ss"; break;
-                default: break;
-            }
-        }
-    }
+    for (char c : foldAscii(s))
+        if (c != ' ') out += c;
     return out;
 }
+
+std::string searchKey(const std::string& text) { return trim(collapseSpaces(foldAscii(text))); }
 
 char indexLetter(const std::string& title) {
     std::string k = sortKey(title);

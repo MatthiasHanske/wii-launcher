@@ -420,6 +420,7 @@ Command applyClick(UiState& s, Library& lib, const std::vector<const Game*>& rec
 
 const std::vector<std::string>& keyboardKeys() {
     static const std::vector<std::string> keys = {
+        "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
         "q", "w", "e", "r", "t", "z", "u", "i", "o", "p",
         "a", "s", "d", "f", "g", "h", "j", "k", "l",
         "y", "x", "c", "v", "b", "n", "m",
@@ -429,7 +430,7 @@ const std::vector<std::string>& keyboardKeys() {
 }
 
 const std::vector<int>& keyboardRows() {
-    static const std::vector<int> rows = {10, 9, 7, 2};
+    static const std::vector<int> rows = {10, 10, 9, 7, 2};
     return rows;
 }
 

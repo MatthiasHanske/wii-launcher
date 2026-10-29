@@ -236,8 +236,10 @@ TEST(ui_search_mar_launches_first_result) {
     UiState s;
     press(s, lib, kNoRecent, Action::Minus);
     CHECK(s.overlay == Overlay::Search);
-    // 'm' per Steuerkreuz: q -> 2x runter (y) -> 6x rechts (m)
+    // 'm' per Steuerkreuz: 1 -> 3x runter (y) -> 6x rechts (m)
     s.keyboardIndex = 0;
+    CHECK_EQ(keyboardKeys()[0], std::string("1"));
+    press(s, lib, kNoRecent, Action::Down);
     press(s, lib, kNoRecent, Action::Down);
     press(s, lib, kNoRecent, Action::Down);
     for (int i = 0; i < 6; ++i) press(s, lib, kNoRecent, Action::Right);
@@ -276,17 +278,52 @@ TEST(ui_search_space_backspace_and_close) {
 
 TEST(ui_keyboard_layout) {
     const auto& rows = keyboardRows();
-    CHECK_EQ(rows.size(), (size_t)4);
+    CHECK_EQ(rows.size(), (size_t)5);
     CHECK_EQ(rows[0], 10);
-    CHECK_EQ(rows[1], 9);
-    CHECK_EQ(rows[2], 7);
-    CHECK_EQ(rows[3], 2);
-    CHECK_EQ(keyboardKeys().size(), (size_t)28);
-    CHECK_EQ(keyboardKeys()[0], std::string("q"));
-    CHECK_EQ(keyboardKeys()[5], std::string("z"));
-    CHECK_EQ(keyboardKeys()[19], std::string("y"));
-    CHECK_EQ(keyIndex("Leer"), 26);
-    CHECK_EQ(keyIndex("Löschen"), 27);
+    CHECK_EQ(rows[1], 10);
+    CHECK_EQ(rows[2], 9);
+    CHECK_EQ(rows[3], 7);
+    CHECK_EQ(rows[4], 2);
+    int total = 0;
+    for (int r : rows) total += r;
+    CHECK_EQ(keyboardKeys().size(), (size_t)total);
+    CHECK_EQ(keyboardKeys().size(), (size_t)38);
+    CHECK_EQ(keyboardKeys()[0], std::string("1"));
+    CHECK_EQ(keyboardKeys()[9], std::string("0"));
+    CHECK_EQ(keyboardKeys()[10], std::string("q"));
+    CHECK_EQ(keyboardKeys()[15], std::string("z"));
+    CHECK_EQ(keyboardKeys()[29], std::string("y"));
+    CHECK_EQ(keyIndex("Leer"), 36);
+    CHECK_EQ(keyIndex("Löschen"), 37);
+}
+
+TEST(ui_keyboard_digit_row) {
+    Library lib(uiFixture());
+    UiState s;
+    press(s, lib, kNoRecent, Action::Minus);
+    s.keyboardIndex = keyIndex("q");
+    press(s, lib, kNoRecent, Action::Up);
+    CHECK_EQ(s.keyboardIndex, keyIndex("1"));
+    press(s, lib, kNoRecent, Action::Up);  // oberste Reihe: bleibt
+    CHECK_EQ(s.keyboardIndex, keyIndex("1"));
+    click(s, lib, kNoRecent, Region::Key, keyIndex("0"));
+    click(s, lib, kNoRecent, Region::Key, keyIndex("0"));
+    click(s, lib, kNoRecent, Region::Key, keyIndex("7"));
+    CHECK_EQ(s.query, std::string("007"));
+    std::vector<const Game*> res = searchResults(s, lib);
+    CHECK_EQ(res.size(), (size_t)2);  // 007 Quantum of Solace, GoldenEye 007
+}
+
+TEST(ui_search_umlaut_query_via_pointer) {
+    std::vector<Game> v = uiFixture();
+    v.push_back(mkGame(System::Wii, "Benjamin Bl\xc3\xbcmchen"));
+    Library lib(std::move(v));
+    UiState s;
+    press(s, lib, kNoRecent, Action::Minus);
+    for (const char* k : {"b", "l", "u", "m"}) click(s, lib, kNoRecent, Region::Key, keyIndex(k));
+    std::vector<const Game*> res = searchResults(s, lib);
+    CHECK_EQ(res.size(), (size_t)1);
+    CHECK(!res.empty() && res[0]->title == "Benjamin Bl\xc3\xbcmchen");
 }
 
 TEST(ui_systems_toggle_nes) {

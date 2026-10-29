@@ -130,6 +130,27 @@ TEST(library_search_umlaut_title) {
     CHECK(found);
 }
 
+TEST(library_search_normalises_query_and_title) {
+    std::vector<Game> v = fixture();
+    v.push_back(mk(System::Wii, "Benjamin Bl\xC3\xBCmchen - T\xC3\xB6r\xC3\xB6\xC3\xB6\xC3\xB6! im Zoo"));
+    v.push_back(mk(System::N64, "Tony Hawk's Pro Skater"));
+    Library lib(std::move(v));
+    lib.setEnabled(SystemSet::defaults());
+    auto one = [&](const std::string& q) {
+        auto r = lib.search(q, 10);
+        return r.size() == 1 ? r[0]->title : std::string();
+    };
+    CHECK_EQ(one("blum"), std::string("Benjamin Bl\xC3\xBCmchen - T\xC3\xB6r\xC3\xB6\xC3\xB6\xC3\xB6! im Zoo"));
+    CHECK_EQ(one("BL\xC3\x9C" "M"), one("blum"));
+    CHECK_EQ(one("toroo"), one("blum"));
+    CHECK_EQ(one("tony hawks"), std::string("Tony Hawk's Pro Skater"));
+    CHECK_EQ(one("tony  hawk's"), std::string("Tony Hawk's Pro Skater"));
+    CHECK_EQ(one("banjo kazooie"), std::string("Banjo-Kazooie"));
+    CHECK_EQ(one("007 quantum"), std::string("007 Quantum of Solace"));
+    CHECK(lib.search("'", 10).empty());
+    CHECK(lib.search("  ", 10).empty());
+}
+
 TEST(library_setEnabled_resets_disabled_tab) {
     Library lib(fixture());
     SystemSet s = SystemSet::defaults();
