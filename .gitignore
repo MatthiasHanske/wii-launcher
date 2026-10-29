@@ -8,3 +8,5 @@ tests/run_tests
 *.o
 *.d
 launcher/launcher.dol
+booter/app_booter.bin
+launcher/data/app_booter.bin

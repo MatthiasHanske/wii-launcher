@@ -6,18 +6,22 @@ export PATH := $(DEVKITPRO)/tools/bin:$(DEVKITPPC)/bin:$(PATH)
 
 all: launcher forwarder booter
 
-launcher:
+launcher: booter
+	@mkdir -p launcher/data
+	cp -p booter/app_booter.bin launcher/data/app_booter.bin
 	$(MAKE) -C launcher
 
 forwarder:
 	@echo "forwarder: not yet"
 
 booter:
-	@echo "booter: not yet"
+	$(MAKE) -C booter
 
 test:
 	$(MAKE) -C tests test
 
 clean:
 	-$(MAKE) -C launcher clean
+	-$(MAKE) -C booter clean
+	rm -f launcher/data/app_booter.bin
 	$(MAKE) -C tests clean
