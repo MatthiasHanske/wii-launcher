@@ -27,7 +27,8 @@ constexpr int kSystemCount = sizeof(kSystems) / sizeof(kSystems[0]);
 
 // TEMPORÄR (Task 8, Hardwaretests A/B/C): feste Startpläne auf Knopfdruck.
 // A = Snes9x GX mit Super Mario World, 1 = USB Loader GX mit RMCP01,
-// 2 = returnToWiiMenu(), Minus = launchHbc(). Fliegt raus, sobald es ein Menü gibt.
+// 2 = returnToWiiMenu(), Minus = launchHbc(), Plus = ScummVM (ELF, Test D).
+// Fliegt raus, sobald es ein Menü gibt.
 LaunchPlan testPlanSnes() {
     LaunchPlan p;
     p.dolPath = "sd:/apps/snes9xgx/boot.dol";
@@ -40,6 +41,21 @@ LaunchPlan testPlanUsbLoader() {
     p.dolPath = "sd:/apps/usbloader_gx/boot.dol";
     p.args = {"RMCP01"};
     return p;
+}
+
+LaunchPlan testPlanScummvm() {
+    LaunchPlan p;
+    p.dolPath = "sd:/apps/scummvm/boot.elf";
+    p.args = {"--auto-detect", "--path=usb:/scummvm/Monkey Island 2",
+              "--extrapath=sd:/apps/scummvm", "--themepath=sd:/apps/scummvm"};
+    return p;
+}
+
+// returnToWiiMenu()/launchHbc() kehren nur bei Fehler zurück; dann nicht weiterzeichnen
+// (Video und Mounts sind schon abgebaut), sondern ausschalten.
+[[noreturn]] void giveUp() {
+    powerOff();
+    while (true) VIDEO_WaitVSync();
 }
 
 }  // namespace
@@ -66,22 +82,32 @@ int main() {
     if (squares > 60) squares = 60;
 
     bool bootFailed = false;
+    // Testknöpfe erst scharf, nachdem ein Frame lang nichts gedrückt war (ein beim
+    // Wiimote-Verbinden gehaltener Knopf soll nichts starten).
+    bool armed = false;
     while (true) {
         WPAD_ScanPads();
         u32 down = WPAD_ButtonsDown(0);
         if (down & WPAD_BUTTON_HOME) break;
+        if (!armed) {
+            armed = WPAD_ButtonsHeld(0) == 0;
+            down = 0;
+        }
         // TEMPORÄR (Task 8): bootDol kehrt nur bei Fehler zurück -> rotes Feld oben rechts.
         if (down & WPAD_BUTTON_A) bootFailed = !bootDol(testPlanSnes(), fs);
         if (down & WPAD_BUTTON_1) bootFailed = !bootDol(testPlanUsbLoader(), fs);
+        if (down & WPAD_BUTTON_PLUS) bootFailed = !bootDol(testPlanScummvm(), fs);
         if (down & WPAD_BUTTON_2) {
             fs.unmountAll();
             GRRLIB_Exit();
             returnToWiiMenu();
+            giveUp();
         }
         if (down & WPAD_BUTTON_MINUS) {
             fs.unmountAll();
             GRRLIB_Exit();
             launchHbc();
+            giveUp();
         }
 
         GRRLIB_FillScreen(0x0F1218FF);
