@@ -28,7 +28,7 @@ INCLUDES	:=	source
 CFLAGS	= -g -O2 -Wall $(MACHDEP) $(INCLUDE)
 CXXFLAGS	=	$(CFLAGS) -std=gnu++17
 
-# make launcher LAUNCHER_GFX_DEMO=1 -> Grafik-Demo (wii/demo.cpp) statt Rauchtest-Anzeige
+# make launcher LAUNCHER_GFX_DEMO=1 -> Grafik-Demo (wii/demo.cpp) statt Launcher-Menü
 ifneq ($(strip $(LAUNCHER_GFX_DEMO)),)
 CXXFLAGS	+=	-DLAUNCHER_GFX_DEMO
 endif
