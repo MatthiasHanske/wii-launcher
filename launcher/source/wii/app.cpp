@@ -47,6 +47,15 @@ const char kEllipsis[] = "\xE2\x80\xA6";
 
 uint64_t nowMs() { return ticks_to_millisecs(gettime()); }
 
+// Power/Reset der Konsole und Power der Wiimote: Callbacks laufen im Interrupt bzw. im
+// WPAD-Thread und setzen nur Flags, die Hauptschleife wertet sie aus.
+volatile bool gPowerRequested = false;
+volatile bool gResetRequested = false;
+
+void onPower() { gPowerRequested = true; }
+void onWiimotePower(s32 /*chan*/) { gPowerRequested = true; }
+void onReset(u32 /*irq*/, void* /*ctx*/) { gResetRequested = true; }
+
 // Wiederholung für gehaltenes Steuerkreuz: erst nach 400 ms, dann alle 120 ms.
 class KeyRepeat {
 public:
@@ -134,6 +143,10 @@ void App::run() {
     std::vector<std::pair<Action, screens::Hit>> actions;
     lastFrame_ = nowMs();
     while (true) {
+        // Power wie Home -> "Ausschalten", Reset wie Home -> "Wii-Menü" (mit Priiloader-Magic).
+        if (gPowerRequested) leave(Command::PowerOff);
+        if (gResetRequested) leave(Command::WiiMenu);
+
         uint64_t now = nowMs();
         InputState in = pollInput();
         screens::Hit hit;
@@ -167,7 +180,10 @@ void App::run() {
 }
 
 void App::startup() {
+    SYS_SetPowerCallback(onPower);
+    SYS_SetResetCallback(onReset);
     WPAD_Init();
+    WPAD_SetPowerButtonCallback(onWiimotePower);
     inputInit(gfx::width(), gfx::height());
     covers_.loadLogos();
 
