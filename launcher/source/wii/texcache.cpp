@@ -66,8 +66,10 @@ const Texture* TexCache::get(const std::string& path) {
 
     Entry& e = entries_[path];
     e.tex.img = img;
-    e.tex.w = static_cast<int>(img->w);
-    e.tex.h = static_cast<int>(img->h);
+    e.tex.w = static_cast<int>(info.width);  // echte Größe; PNGU füllt auf Vielfache von 4 auf
+    e.tex.h = static_cast<int>(info.height);
+    e.tex.texW = static_cast<int>(img->w);
+    e.tex.texH = static_cast<int>(img->h);
     e.frame = frame_;
     lru_.insert(path, textureBytes(img->w, img->h));
     return &e.tex;

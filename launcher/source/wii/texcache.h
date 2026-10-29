@@ -4,8 +4,8 @@
 // Zeiger aus get() bleiben gültig, bis der Eintrag verdrängt wird. Verdrängt werden nur
 // Texturen, die im laufenden Bild (seit dem letzten evictUnused) nicht per get() geholt
 // wurden: Die GPU zeichnet asynchron bis GRRLIB_Render, eine in diesem Bild schon
-// gezeichnete Textur darf vorher nicht freigegeben werden. Ablauf pro Bild:
-//     beginFrame(); ... cache.get(...) / gfx::image(...) ...; endFrame(); cache.evictUnused();
+// gezeichnete Textur darf vorher nicht freigegeben werden. Ablauf pro Bild siehe gfx.h:
+//     gfx::beginFrame(); ... cache.get(...) / gfx::image(...) ...; gfx::endFrame(); cache.endFrame();
 // Liegt das Budget nur durch Texturen des laufenden Bilds darüber, wird es vorübergehend
 // überschritten und nach dem Bild wieder eingehalten.
 #include <cstddef>
@@ -31,6 +31,12 @@ public:
     // Nach endFrame() aufrufen: verdrängt die ältesten Einträge, bis das Budget passt,
     // und beginnt ein neues Bild.
     void evictUnused();
+    // Dasselbe unter dem Namen des Bildprotokolls (gfx.h): nach gfx::endFrame() aufrufen.
+    void endFrame() { evictUnused(); }
+
+    // Gemerkte Fehlschläge vergessen (z. B. nachdem Cover nachgeladen wurden); geladene
+    // Texturen bleiben.
+    void forgetFailures() { failed_.clear(); }
 
     // Alles freigeben, auch gemerkte Fehlschläge (z. B. nach Austausch der Karte).
     void clear();

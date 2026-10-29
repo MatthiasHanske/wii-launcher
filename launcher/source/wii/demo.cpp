@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <string>
 
+#include "core/png_check.h"
 #include "logo_wii_png.h"
 #include "wii/fs_wii.h"
 #include "wii/gfx.h"
@@ -31,10 +32,15 @@ void runGfxDemo(WiiFs& fs) {
 
     TexCache cache(kTextureBudget);
     Texture logo;
-    logo.img = GRRLIB_LoadTexturePNG(logo_wii_png);
-    if (logo.img && logo.img->data) {
-        logo.w = static_cast<int>(logo.img->w);
-        logo.h = static_cast<int>(logo.img->h);
+    PngInfo logoInfo;
+    if (checkPng(logo_wii_png, logo_wii_png_size, logoInfo)) {
+        logo.img = GRRLIB_LoadTexturePNG(logo_wii_png);
+        if (logo.img && logo.img->data) {
+            logo.w = static_cast<int>(logoInfo.width);
+            logo.h = static_cast<int>(logoInfo.height);
+            logo.texW = static_cast<int>(logo.img->w);
+            logo.texH = static_cast<int>(logo.img->h);
+        }
     }
 
     while (true) {
@@ -86,7 +92,7 @@ void runGfxDemo(WiiFs& fs) {
         if (in.pointerValid) gfx::ring(in.pointerX, in.pointerY, 12, 3, 0xFFFFFFE6);
 
         gfx::endFrame();
-        cache.evictUnused();
+        cache.endFrame();
     }
 
     cache.clear();

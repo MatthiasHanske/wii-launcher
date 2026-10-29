@@ -10,8 +10,8 @@ void inputInit(int width, int height) {
 InputState pollInput() {
     WPAD_ScanPads();
     InputState s;
-    s.pressed = WPAD_ButtonsDown(WPAD_CHAN_0);
-    s.held = WPAD_ButtonsHeld(WPAD_CHAN_0);
+    s.pressed = WPAD_ButtonsDown(WPAD_CHAN_0) & kWiimoteButtons;
+    s.held = WPAD_ButtonsHeld(WPAD_CHAN_0) & kWiimoteButtons;
     ir_t ir;
     WPAD_IR(WPAD_CHAN_0, &ir);
     if (ir.valid) {

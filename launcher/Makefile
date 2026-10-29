@@ -90,6 +90,7 @@ export HFILES := $(addsuffix .h,$(subst .,_,$(BINFILES)))
 #---------------------------------------------------------------------------------
 export INCLUDE	:=	$(foreach dir,$(INCLUDES), -iquote $(CURDIR)/$(dir)) \
 					$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+					-I$(PORTLIBS_PATH)/ppc/include/freetype2 \
 					-I$(CURDIR)/$(BUILD) \
 					-I$(LIBOGC_INC)
 
