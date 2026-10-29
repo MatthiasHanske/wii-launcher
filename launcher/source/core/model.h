@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <string>
 
 enum class System { Wii, GameCube, N64, SNES, NES, Sega, Adventure };
@@ -28,6 +29,14 @@ inline const char* systemKey(System s) {
         case System::Adventure: return "dos";
     }
     return "";
+}
+
+inline std::optional<System> systemFromKey(const std::string& k) {
+    static const System all[] = {System::Wii,  System::GameCube, System::N64,      System::SNES,
+                                 System::NES,  System::Sega,     System::Adventure};
+    for (System s : all)
+        if (k == systemKey(s)) return s;
+    return std::nullopt;
 }
 
 struct Game {
