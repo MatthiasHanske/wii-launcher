@@ -40,10 +40,10 @@ _warned_resize = False
 # systemKey -> Liste von (Repo, Endungen)
 SYSTEMS = {
     "n64": [("Nintendo_-_Nintendo_64", {"z64", "v64", "n64"})],
-    "snes": [("Nintendo_-_Super_Nintendo_Entertainment_System", {"sfc", "smc", "fig", "swc"})],
-    "nes": [("Nintendo_-_Nintendo_Entertainment_System", {"nes", "unf", "fds"})],
+    "snes": [("Nintendo_-_Super_Nintendo_Entertainment_System", {"sfc", "smc", "fig", "swc", "zip"})],
+    "nes": [("Nintendo_-_Nintendo_Entertainment_System", {"nes", "unf", "fds", "zip"})],
     "sega": [
-        ("Sega_-_Mega_Drive_-_Genesis", {"md", "smd", "gen"}),
+        ("Sega_-_Mega_Drive_-_Genesis", {"md", "smd", "gen", "zip"}),
         ("Sega_-_Master_System_-_Mark_III", {"sms"}),
         ("Sega_-_SG-1000", {"sg"}),
     ],
