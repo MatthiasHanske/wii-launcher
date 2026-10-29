@@ -9,7 +9,7 @@
 #   3. "Ordner in Datei konvertieren" (Convert Folder to File) drücken. Dolphin schreibt
 #      daraus das SD-Image (Standard: <Dolphin-User>/Wii/sd.raw).
 #   4. "SD-Karte einlegen" (Insert SD Card) aktivieren, launcher.dol starten
-#      (gebaut mit: make launcher LAUNCHER_GFX_DEMO=1).
+#      (Menü: make launcher; Grafik-Demo: make launcher LAUNCHER_GFX_DEMO=1).
 # Alternativ "Ordner beim Start automatisch synchronisieren" aktivieren, dann
 # konvertiert Dolphin bei jedem Emulationsstart neu.
 #
@@ -17,6 +17,9 @@
 #   config/images/2D/*.png     drei 2D-Cover (160x225) für den Texturcache
 #   launcher/covers/wii/kaputt.png  10 Byte (PNG-Signatur + Müll): TexCache muss nullptr liefern
 #   launcher/mock/...          Mini-Spielebaum (Dateien mit wenigen Bytes)
+#   launcher/settings.txt      extra_root=sd:/launcher/mock, damit der Launcher ohne USB den
+#                              Mock-Baum zeigt (für das Fehlerbild "USB-Platte nicht gefunden"
+#                              die Zeile extra_root entfernen)
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 dir="$here/dolphin-sd"

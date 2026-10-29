@@ -1,0 +1,2 @@
+systems=wii,gc,n64,snes,dos
+extra_root=sd:/launcher/mock
