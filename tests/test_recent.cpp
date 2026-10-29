@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "core/library.h"
 #include "core/recent.h"
 
 static RecentEntry mk(int64_t t, System s, const char* dir, const char* file) {
@@ -97,4 +98,24 @@ TEST(recent_resolve_no_duplicates) {
     std::vector<Game> all = {mkGame(System::Wii, "d1", "a")};
     std::vector<RecentEntry> r = {mk(2, System::Wii, "d1", "a"), mk(1, System::Wii, "d1", "a")};
     CHECK_EQ(resolveRecent(r, all).size(), (size_t)1);
+}
+
+TEST(recent_for_library_filters_disabled_systems) {
+    std::vector<Game> games(3);
+    games[0].system = System::Wii;  games[0].dir = "w"; games[0].file = "a"; games[0].sortKey = "a";
+    games[1].system = System::SNES; games[1].dir = "s"; games[1].file = "b"; games[1].sortKey = "b";
+    games[2].system = System::N64;  games[2].dir = "n"; games[2].file = "c"; games[2].sortKey = "c";
+    Library lib(games);
+    lib.setEnabled(SystemSet::defaults());  // Wii, GameCube, N64
+    std::vector<RecentEntry> e = {mk(3, System::SNES, "s", "b"), mk(2, System::N64, "n", "c"),
+                                  mk(1, System::Wii, "w", "a")};
+    auto r = recentForLibrary(e, lib);
+    CHECK_EQ(r.size(), (size_t)2);
+    CHECK_EQ(r[0]->file, "c");
+    CHECK_EQ(r[1]->file, "a");
+    CHECK(r[0] == &lib.games()[2]);
+    SystemSet all = SystemSet::defaults();
+    all.at(System::SNES) = true;
+    lib.setEnabled(all);
+    CHECK_EQ(recentForLibrary(e, lib).size(), (size_t)3);
 }

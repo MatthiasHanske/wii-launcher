@@ -28,6 +28,7 @@ public:
 
     void setEnabled(const SystemSet& s);
     const SystemSet& enabled() const { return enabled_; }
+    const std::vector<Game>& games() const { return games_; }  // alle, sortiert, unabhaengig von Tab/Systemen
     std::vector<System> tabs() const;                 // aktivierte Systeme, Enum-Reihenfolge
     void setTab(std::optional<System> tab);           // nullopt = Alle
     const std::vector<const Game*>& visible() const { return visible_; }

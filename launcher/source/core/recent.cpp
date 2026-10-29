@@ -100,3 +100,10 @@ std::vector<const Game*> resolveRecent(const std::vector<RecentEntry>& entries,
     }
     return out;
 }
+
+std::vector<const Game*> recentForLibrary(const std::vector<RecentEntry>& entries, const Library& library) {
+    std::vector<const Game*> out;
+    for (const Game* g : resolveRecent(entries, library.games()))
+        if (library.enabled().get(g->system)) out.push_back(g);
+    return out;
+}
