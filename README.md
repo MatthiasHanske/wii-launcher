@@ -40,3 +40,8 @@ Cover-Größen: Wii/GameCube nutzen die 2D-Cover von USB Loader GX (160x224), Em
 Ohne `GITHUB_TOKEN` gilt das niedrige anonyme API-Limit; bei Bedarf `export GITHUB_TOKEN=$(gh auth token)`. `--refresh` überschreibt vorhandene Cover, `--only "<Teilstring>"` beschränkt auf ROMs bzw. Spielordner mit diesem Namensteil. Bei Adventure-Ordnern (Kurznamen) trifft auch ein zusammenhängender Teil des Libretro-Namens; ScummVM-Ordner suchen zuerst im Repo ScummVM, dann in DOS, dosbox-Ordner nur in DOS.
 
 Die Cover unter `tools/dolphin-sd/` stammen von GameTDB und sind nur Testmaterial für den privaten Gebrauch; vor einer Veröffentlichung des Repos müssen sie durch eigene Bilder ersetzt werden.
+
+## RVZ nach ISO
+
+`python3 -I tools/rvz2iso.py <in.rvz> <out.iso>` wandelt Dolphin-RVZ-Images von GameCube-Spielen ohne Fremd-Binaries in rohe ISOs um (Python 3.14, Kompression NONE oder zstd, Junk-Daten werden per LFG rekonstruiert).
+`--verify-only` dekodiert nur und gibt SHA-1/CRC32 aus, die sich direkt mit der Redump-DAT vergleichen lassen; Wii-Images werden abgelehnt.
