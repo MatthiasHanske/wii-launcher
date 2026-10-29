@@ -31,6 +31,16 @@ struct UiState {
 
 enum class Action { Up, Down, Left, Right, A, B, Plus, Minus, One, Two, Home, PointerClick };
 
+// Steuerkreuz-Vertrag des Hauptbildschirms (Task 11), Anordnung Leiste oben, darunter
+// Karussell | A-Z | Liste:
+// - Tabs: links/rechts Tab wechseln, runter oder A -> Karussell.
+// - Karussell: links/rechts blaettern (erster Schritt loescht nur die Vorschau), hoch -> Tabs,
+//   runter -> Liste, A startet.
+// - Liste: hoch/runter Zeile (seitenuebergreifend); hoch nur bei absolutem Index 0 -> Tabs.
+//   Links -> A-Z, rechts tut nichts. 1/2 blaettern seitenweise, A startet.
+// - A-Z: hoch/runter Buchstabe, A springt in die Liste, rechts oder B -> Liste,
+//   links -> Karussell.
+
 // Regionstypen fuer den Hit-Test des Renderers: pointerHit = {int(Region), Index}.
 enum class Region {
     None = 0,        // Klick ins Leere (schliesst ein offenes Overlay)

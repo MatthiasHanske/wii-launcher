@@ -320,7 +320,7 @@ Command applyMain(UiState& s, Library& lib, const std::vector<const Game*>& rece
                     syncLetterToList(s, lib);
                     s.focus = Focus::Letters;
                     break;
-                case Action::Right: s.focus = Focus::Carousel; break;
+                // Right: nichts, die Liste ist die rechte Spalte.
                 case Action::One: page(s, lib, -1); break;
                 case Action::Two: page(s, lib, +1); break;
                 case Action::A:
@@ -336,6 +336,7 @@ Command applyMain(UiState& s, Library& lib, const std::vector<const Game*>& rece
                 case Action::Up: s.letterIndex = clampi(s.letterIndex - 1, 0, n - 1); break;
                 case Action::Down: s.letterIndex = clampi(s.letterIndex + 1, 0, n - 1); break;
                 case Action::A: jumpLetter(s, lib, s.letterIndex); break;
+                case Action::Left: s.focus = Focus::Carousel; break;
                 case Action::Right:
                 case Action::B: s.focus = Focus::List; break;
                 default: break;

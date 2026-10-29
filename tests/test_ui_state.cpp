@@ -181,15 +181,23 @@ TEST(ui_list_paging_clamps) {
     CHECK(s.carouselPreview == lib.visible()[1]);
 }
 
-TEST(ui_list_left_right_switch_focus) {
+// Anordnung Karussell | A-Z | Liste: links/rechts bewegt den Fokus räumlich.
+TEST(ui_left_right_follow_layout) {
     Library lib(uiFixture());
     UiState s;
     s.focus = Focus::List;
+    press(s, lib, kNoRecent, Action::Down);
+    press(s, lib, kNoRecent, Action::Right);  // rechte Spalte: nichts
+    CHECK(s.focus == Focus::List);
+    CHECK_EQ(s.listIndex, 1);
     press(s, lib, kNoRecent, Action::Left);
     CHECK(s.focus == Focus::Letters);
-    s.focus = Focus::List;
     press(s, lib, kNoRecent, Action::Right);
+    CHECK(s.focus == Focus::List);
+    press(s, lib, kNoRecent, Action::Left);
+    press(s, lib, kNoRecent, Action::Left);  // A-Z -> Karussell
     CHECK(s.focus == Focus::Carousel);
+    CHECK(s.carouselPreview == lib.visible()[1]);  // Vorschau bleibt bis zum ersten Blättern
 }
 
 TEST(ui_letters_jump) {
@@ -570,7 +578,8 @@ TEST(ui_carousel_first_step_clears_preview) {
     s.focus = Focus::List;
     press(s, lib, recent, Action::Down);
     CHECK(s.carouselPreview == lib.visible()[1]);
-    press(s, lib, recent, Action::Right);  // Fokus Karussell
+    press(s, lib, recent, Action::Left);  // A-Z
+    press(s, lib, recent, Action::Left);  // Fokus Karussell
     CHECK(s.focus == Focus::Carousel);
     press(s, lib, recent, Action::Right);
     CHECK(s.carouselPreview == nullptr);
