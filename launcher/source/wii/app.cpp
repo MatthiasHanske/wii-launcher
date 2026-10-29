@@ -210,7 +210,12 @@ void App::rebuildLibrary(std::vector<Game> games) {
     refreshRecent();
 }
 
-void App::refreshRecent() { recent_ = recentForLibrary(recentEntries_, *lib_); }
+void App::refreshRecent() {
+    recent_ = recentForLibrary(recentEntries_, *lib_);
+    // apply() klemmt den Index erst bei der nächsten Eingabe; bis dahin bliebe die Mitte leer.
+    int count = static_cast<int>(recent_.empty() ? lib_->visible().size() : recent_.size());
+    state_.carouselIndex = std::max(0, std::min(state_.carouselIndex, count - 1));
+}
 
 void App::saveSettings() {
     settings_.systems = state_.systems;
