@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "app_booter_bin.h"
+#include "wii/log.h"
 
 namespace {
 
@@ -108,6 +109,7 @@ struct ExecInfo {
     // Datei-Offset der Einsprungadresse; die libogc-crt0 legt dort "b ...; .ascii \"_arg\""
     // ab, der Booter kopiert struct __argv nach Entry+8.
     size_t entryOffset = 0;
+    u32 entry = 0;  // Einsprungadresse (für das Log)
 };
 
 // Physische Bereiche, die der Booter während des Ladens selbst braucht: Programmkopie bis
@@ -137,6 +139,7 @@ bool inspectElf(ExecReader& r, ExecInfo& info) {
     if (phoff == 0 || phnum == 0 || phentsize != 32) return false;
     if (phoff > size || static_cast<uint64_t>(phnum) * 32 > size - phoff) return false;
     u32 entry = (be32(d + 24) & 0x3FFFFFFF) | 0x80000000;
+    info.entry = entry;
     std::vector<u8> phs;
     if (!r.read(phoff, phnum * 32u, phs)) return false;
     bool entryFound = false;
@@ -168,6 +171,7 @@ bool inspectDol(ExecReader& r, ExecInfo& info) {
     if (size <= 0x100 || !r.read(0, 0x100, h)) return false;
     const u8* d = h.data();
     u32 entry = be32(d + 0xE0);
+    info.entry = entry;
     if (!inMem1(entry) && !inMem2(entry)) return false;
     bool anyText = false;
     bool entryFound = false;
@@ -212,7 +216,8 @@ bool acceptsArgv(ExecReader& r, const ExecInfo& info) {
 }
 
 // Gemeinsame Prüfung von canBoot und bootDol (schreibt nichts). reason nur bei false gesetzt.
-bool checkExec(ExecReader& r, const std::string& path, bool& withArgv, std::string& reason) {
+bool checkExec(ExecReader& r, const std::string& path, bool& withArgv, std::string& reason,
+               ExecInfo* infoOut = nullptr) {
     std::vector<u8> magic;
     if (r.size() < 4) {
         reason = "Kein g\xC3\xBCltiges Programm: " + path;
@@ -225,7 +230,9 @@ bool checkExec(ExecReader& r, const std::string& path, bool& withArgv, std::stri
     bool elf = std::memcmp(magic.data(), "\x7f" "ELF", 4) == 0;
     ExecInfo info;
     bool valid = elf ? inspectElf(r, info) : inspectDol(r, info);
+    info.elf = elf;
     if (valid) withArgv = acceptsArgv(r, info);
+    if (infoOut) *infoOut = info;
     if (r.readError()) {
         reason = "Nicht lesbar: " + path;
         return false;
@@ -294,33 +301,56 @@ bool canBoot(const LaunchPlan& plan, WiiFs& fs, std::string& reason) {
     return true;
 }
 
-bool bootDol(const LaunchPlan& plan, WiiFs& fs) {
+bool bootDol(const LaunchPlan& plan, WiiFs& fs, std::string& reason) {
     // 1. Prüfen, solange nichts verändert ist: Größe, Header, Argumente, Heap. Gleiche
     // Prüfung wie canBoot, hier auf der ganz gelesenen Datei.
+    auto fail = [&](const std::string& why) {
+        reason = why;
+        diag::logf("bootDol: Abbruch: %s", why.c_str());
+        return false;
+    };
+    diag::logf("bootDol: %s", plan.dolPath.c_str());
     struct stat st;
-    if (stat(plan.dolPath.c_str(), &st) != 0) return false;
+    if (stat(plan.dolPath.c_str(), &st) != 0) return fail("Fehlt auf der SD: " + plan.dolPath);
     size_t size = static_cast<size_t>(st.st_size);
-    if (size == 0 || size > kMaxExecSize) return false;
+    diag::logf("bootDol: Dateigr\xC3\xB6\xC3\x9F" "e %u Byte", static_cast<unsigned>(size));
+    if (size == 0 || size > kMaxExecSize)
+        return fail((size == 0 ? "Leere Datei: " : "Gr\xC3\xB6\xC3\x9F" "er als 16 MB: ") + plan.dolPath);
 
     std::vector<std::string> args = buildArgs(plan);
-    if (!argsFit(args)) return false;
+    if (!argsFit(args)) return fail("Startargumente zu lang");
 
     bool withArgv = false;
     {
         std::vector<uint8_t> data;
-        if (!fs.readBytes(plan.dolPath, 0, size, data) || data.size() != size) return false;
+        if (!fs.readBytes(plan.dolPath, 0, size, data) || data.size() != size)
+            return fail("Nicht lesbar: " + plan.dolPath);
         ExecReader r(data.data(), size);
-        std::string reason;
-        if (!checkExec(r, plan.dolPath, withArgv, reason)) return false;
-        if (!heapBelowExec()) return false;
+        ExecInfo info;
+        std::string why;
+        bool ok = checkExec(r, plan.dolPath, withArgv, why, &info);
+        diag::logf("bootDol: Header %s, Entry 0x%08X, _arg %s", info.elf ? "ELF" : "DOL",
+                   static_cast<unsigned>(info.entry), ok && withArgv ? "ja" : "nein");
+        if (!ok) return fail(why);
+        if (!heapBelowExec()) return fail("Zu wenig Speicher");
 
         // 2. Erst jetzt Konfigurationsdateien schreiben.
-        for (const auto& file : plan.filesToWrite)
-            if (!fs.writeText(file.first, file.second)) return false;
+        for (const auto& file : plan.filesToWrite) {
+            bool written = fs.writeText(file.first, file.second);
+            diag::logf("bootDol: schreibe %s (%u Byte): %s", file.first.c_str(),
+                       static_cast<unsigned>(file.second.size()), written ? "ok" : "FEHLER");
+            if (!written) return fail("Schreiben fehlgeschlagen: " + file.first);
+        }
 
         std::memcpy(kExecAddr, data.data(), size);
     }
     DCFlushRange(kExecAddr, size);
+
+    size_t argsLength = 1;
+    for (const std::string& a : args) argsLength += a.size() + 1;
+    diag::logf("bootDol: argv %u Eintr\xC3\xA4ge, Gesamtl\xC3\xA4nge %u Byte%s", static_cast<unsigned>(args.size()),
+               static_cast<unsigned>(argsLength), withArgv ? "" : " (nicht \xC3\xBC" "bergeben, kein _arg)");
+    for (size_t i = 0; i < args.size(); ++i) diag::logf("bootDol: argv[%u] = %s", static_cast<unsigned>(i), args[i].c_str());
 
     // 3. Ab hier kein Zurück mehr. Reihenfolge wie RunAppbooter in USB Loader GX:
     // IOS-Reload vor argv und Booter, damit nichts davon den Reload überleben muss.
@@ -331,6 +361,9 @@ bool bootDol(const LaunchPlan& plan, WiiFs& fs) {
     VIDEO_WaitVSync();
 
     WPAD_Shutdown();
+    // Letzte Logzeile: danach sind die Geräte ausgehängt.
+    diag::logf("bootDol: Sprung");
+    diag::logClose();
     fs.unmountAll();
 
     if (IOS_GetVersion() != 58 && ios58Installed()) IOS_ReloadIOS(58);  // Fehler egal

@@ -499,7 +499,7 @@ void drawMain(const UiState& s, const Library& lib, const std::vector<const Game
     }
 }
 
-void drawNoUsb(const Hit& hover) {
+void drawNoUsb(const Hit& hover, const std::string& reason) {
     NoUsbLayout l = noUsbLayout();
     const char* title = "USB-Platte nicht gefunden";
     gfx::text(std::round((W() - gfx::textWidth(kSizeTitle, title)) / 2), l.titleY, kSizeTitle, kText, title);
@@ -507,6 +507,11 @@ void drawNoUsb(const Hit& hover) {
     textIn(l.button, kSizeList, kWhite, "Erneut suchen", true);
     const char* hint = "A: Erneut suchen";
     gfx::text(std::round((W() - gfx::textWidth(kSizeSmall, hint)) / 2), l.hintY, kSizeSmall, kMuted, hint);
+    // Ergebnis von mountUsb (dasselbe steht im Diagnose-Log).
+    if (!reason.empty()) {
+        std::string r = gfx::fitText(kSizeSmall, W() - 2 * kSafe, reason);
+        gfx::text(std::round((W() - gfx::textWidth(kSizeSmall, r)) / 2), l.hintY + 40, kSizeSmall, kMuted, r);
+    }
 }
 
 void drawOverlay(Overlay o, const UiState& s, const Library& lib, float a) {

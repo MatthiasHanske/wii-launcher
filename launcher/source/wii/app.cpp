@@ -23,6 +23,7 @@
 #include "wii/fs_wii.h"
 #include "wii/gfx.h"
 #include "wii/input.h"
+#include "wii/log.h"
 #include "wii/screens.h"
 
 namespace app {
@@ -110,7 +111,7 @@ private:
     void launch(const Game& g);
     void showLaunchError(const std::string& title, const std::string& detail);
     [[noreturn]] void leave(Command::Kind kind);
-    [[noreturn]] void abortToWiiMenu();
+    [[noreturn]] void abortToWiiMenu(const char* reason);
     void retryUsb();
 
     void animate(uint64_t now);
@@ -121,6 +122,7 @@ private:
 
     WiiFs fs_;
     bool sdOk_ = false;
+    std::string usbInfo_;  // Ergebnis von mountUsb, auch auf dem Bild "USB-Platte nicht gefunden"
     Settings settings_;
     std::vector<RecentEntry> recentEntries_;
     std::unique_ptr<Library> lib_ = std::make_unique<Library>(std::vector<Game>());
@@ -143,15 +145,22 @@ void App::run() {
     // Ohne SD oder Grafik nichts anzeigen und sofort ins Wii-Menü (Priiloader-Magic). Ein
     // Rücksprung aus main() führte unter Priiloader-Autoboot sonst in eine Startschleife.
     // SD vor der Grafik, damit in diesem Fall kein Bild entsteht.
+    diag::logf("Start");
     sdOk_ = fs_.mountSd();
-    if (!sdOk_) abortToWiiMenu();
-    if (!gfx::init()) abortToWiiMenu();
+    if (!sdOk_) abortToWiiMenu("SD nicht eingeh\xC3\xA4ngt");  // ohne SD kein Log
+    diag::logInit();
+    diag::logf("SD eingeh\xC3\xA4ngt");
+    bool gfxOk = gfx::init();
+    diag::logf("gfx::init: %s", gfxOk ? "ok" : "FEHLER");
+    if (!gfxOk) abortToWiiMenu("Grafik nicht initialisiert");
     startup();
 
     std::vector<std::pair<Action, screens::Hit>> actions;
     lastFrame_ = nowMs();
     while (true) {
         // Power wie Home -> "Ausschalten", Reset wie Home -> "Wii-Menü" (mit Priiloader-Magic).
+        if (gPowerRequested || gResetRequested)
+            diag::logf("Taste: power=%d reset=%d", gPowerRequested ? 1 : 0, gResetRequested ? 1 : 0);
         if (gPowerRequested) leave(Command::PowerOff);
         if (gResetRequested) leave(Command::WiiMenu);
 
@@ -196,15 +205,43 @@ void App::startup() {
     covers_.loadLogos();
 
     std::string text;
-    if (sdOk_ && fs_.readText(kSettingsPath, text)) settings_ = parseSettings(text);
+    bool settingsRead = sdOk_ && fs_.readText(kSettingsPath, text);
+    if (settingsRead) settings_ = parseSettings(text);
+    std::string systems;
+    for (int i = 0; i < 7; ++i) {
+        System sys = static_cast<System>(i);
+        if (!settings_.systems.get(sys)) continue;
+        if (!systems.empty()) systems += ',';
+        systems += systemKey(sys);
+    }
+    diag::logf("Einstellungen %s: systems=%s extraRoot=%s", settingsRead ? "geladen" : "fehlen (Standard)",
+               systems.c_str(), settings_.extraRoot.empty() ? "-" : settings_.extraRoot.c_str());
     state_.systems = settings_.systems;
     lib_->setEnabled(state_.systems);
 
     // mountUsb blockiert bis zu 10 x 500 ms; das zuletzt gezeigte Bild bleibt so lange stehen.
     messageFrame(std::string("Suche USB-Platte ") + kEllipsis);
     bool usb = fs_.mountUsb(10, 500);
+    usbInfo_ = fs_.lastMountInfo();
+    diag::logf("USB: %s", usbInfo_.c_str());
     if (sdOk_ && fs_.readText(kRecentPath, text)) recentEntries_ = parseRecent(text);
     scanAll(usb);
+    diag::logf("Zuletzt gespielt: %u Eintr\xC3\xA4ge geladen, %u in der Bibliothek",
+               static_cast<unsigned>(recentEntries_.size()), static_cast<unsigned>(recent_.size()));
+}
+
+// "usb:/: 12 Spiele (Wii 5, N64 7)"
+void logScan(const std::string& root, const std::vector<Game>& games) {
+    int counts[7] = {};
+    for (const Game& g : games) ++counts[static_cast<int>(g.system)];
+    std::string detail;
+    for (int i = 0; i < 7; ++i) {
+        if (!counts[i]) continue;
+        if (!detail.empty()) detail += ", ";
+        detail += std::string(systemName(static_cast<System>(i))) + " " + std::to_string(counts[i]);
+    }
+    diag::logf("Scan %s: %u Spiele (%s)", root.c_str(), static_cast<unsigned>(games.size()),
+               detail.empty() ? "-" : detail.c_str());
 }
 
 // usb:/ plus settings.extraRoot (z. B. sd:/launcher/mock für Dolphin). Ohne USB und ohne
@@ -212,12 +249,17 @@ void App::startup() {
 void App::scanAll(bool usb) {
     if (usb || !settings_.extraRoot.empty()) messageFrame(std::string("Lese Spieleliste ") + kEllipsis);
     std::vector<Game> games;
-    if (usb) games = scanLibrary(fs_, "usb:/");
+    if (usb) {
+        games = scanLibrary(fs_, "usb:/");
+        logScan("usb:/", games);
+    }
     if (!settings_.extraRoot.empty()) {
         std::vector<Game> extra = scanLibrary(fs_, settings_.extraRoot);
+        logScan(settings_.extraRoot, extra);
         games.insert(games.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
     }
     state_.noUsb = !usb && settings_.extraRoot.empty();
+    if (state_.noUsb) diag::logf("Bild \"USB-Platte nicht gefunden\": %s", usbInfo_.c_str());
     rebuildLibrary(std::move(games));
 }
 
@@ -280,8 +322,11 @@ void App::handle(const Command& c) {
         case Command::None: break;
         case Command::Launch:
             if (c.game) launch(*c.game);
+            else diag::logf("Befehl Launch ohne Spiel");
             break;
         case Command::ToggleSystem:
+            diag::logf("Befehl ToggleSystem: %s -> %s", systemName(c.system),
+                       state_.systems.get(c.system) ? "an" : "aus");
             // apply hat die Library schon umgeschaltet; nur speichern und Karussell neu filtern.
             saveSettings();
             refreshRecent();
@@ -289,15 +334,25 @@ void App::handle(const Command& c) {
         case Command::WiiMenu:
         case Command::Hbc:
         case Command::PowerOff: leave(c.kind);
-        case Command::Retry: retryUsb(); break;
+        case Command::Retry:
+            diag::logf("Befehl Retry");
+            retryUsb();
+            break;
     }
 }
 
 void App::launch(const Game& g) {
     const std::string title = g.title;
     LaunchPlan plan = makeLaunchPlan(g, fs_);
+    std::string argList;
+    for (const std::string& a : plan.args) argList += " [" + a + "]";
+    diag::logf("Befehl Launch: \"%s\" system=%s dir=%s file=%s dol=%s quickBoot=%d args=%u%s", title.c_str(),
+               systemName(g.system), g.dir.c_str(), g.file.c_str(), plan.dolPath.c_str(), plan.quickBoot ? 1 : 0,
+               static_cast<unsigned>(plan.args.size()), argList.c_str());
     std::string reason;
-    if (!canBoot(plan, fs_, reason)) {
+    bool bootable = canBoot(plan, fs_, reason);
+    diag::logf("canBoot: %s%s", bootable ? "ok" : "nein: ", reason.c_str());
+    if (!bootable) {
         // Vor dem Point of no Return gescheitert: nichts geändert, kein Eintrag in "Zuletzt
         // gespielt". Auswahl, Vorschau und offenes Overlay bleiben, nur die Meldung erscheint.
         showLaunchError(title, reason);
@@ -318,10 +373,10 @@ void App::launch(const Game& g) {
     // Cover freigeben: bootDol liest die Programmdatei (bis 16 MB) auf den Heap.
     covers_.clear();
 
-    bootDol(plan, fs_);  // kehrt nur bei Fehlern zurück, Mounts und Video sind dann intakt
-
-    // canBoot war erfolgreich, also Lese-/Schreibfehler oder Datei zwischendurch geändert.
-    showLaunchError(title, "Nicht lesbar oder kein g\xC3\xBCltiges Programm: " + plan.dolPath);
+    // Kehrt nur bei Fehlern zurück, Mounts und Video sind dann intakt. canBoot war
+    // erfolgreich, also Lese-/Schreibfehler oder Datei zwischendurch geändert.
+    bootDol(plan, fs_, reason);
+    showLaunchError(title, reason);
     // Karussell zeigt das gerade gewählte Spiel (jetzt vorn in recent): Vorschau weg,
     // offenes Overlay (z. B. Suche) zu.
     state_.carouselPreview = nullptr;
@@ -340,6 +395,8 @@ void App::showLaunchError(const std::string& title, const std::string& detail) {
 }
 
 void App::leave(Command::Kind kind) {
+    diag::logf("leave: %s", kind == Command::WiiMenu ? "WiiMenu" : kind == Command::Hbc ? "Hbc" : "PowerOff");
+    diag::logClose();
     fadeOut(nullptr);
     covers_.release();
     gfx::shutdown();
@@ -354,7 +411,9 @@ void App::leave(Command::Kind kind) {
     while (true) VIDEO_WaitVSync();
 }
 
-void App::abortToWiiMenu() {
+void App::abortToWiiMenu(const char* reason) {
+    diag::logf("abortToWiiMenu: %s", reason);
+    diag::logClose();
     fs_.unmountAll();
     returnToWiiMenu();
     // Nur bei Fehler hier.
@@ -364,7 +423,10 @@ void App::abortToWiiMenu() {
 
 void App::retryUsb() {
     messageFrame(std::string("Suche USB-Platte ") + kEllipsis);
-    if (!fs_.mountUsb(3, 500)) return;
+    bool usb = fs_.mountUsb(3, 500);
+    usbInfo_ = fs_.lastMountInfo();
+    diag::logf("USB (erneut): %s", usbInfo_.c_str());
+    if (!usb) return;
     scanAll(true);
     covers_.forgetFailures();
     lastFrame_ = nowMs();
@@ -385,7 +447,7 @@ void App::animate(uint64_t now) {
 void App::drawScene(const InputState* in, const screens::Hit& hit, uint64_t now) {
     gfx::beginFrame(screens::kBg);
     if (state_.noUsb) {
-        screens::drawNoUsb(state_.overlay == Overlay::None ? hit : std::nullopt);
+        screens::drawNoUsb(state_.overlay == Overlay::None ? hit : std::nullopt, usbInfo_);
     } else {
         float slide = 0;
         if (slideFrom_ != 0) {

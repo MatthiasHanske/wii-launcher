@@ -9,6 +9,9 @@ public:
     // USB-Festplatte als "usb:" einhängen. Erkennt MBR und GPT; versucht es retries-mal
     // mit delayMs Pause (Platten brauchen nach dem Start oft einige Sekunden).
     bool mountUsb(int retries, int delayMs);
+    // Wie der letzte mountUsb-Aufruf ausging (Anzeige- und Logtext, UTF-8), z. B.
+    // "eingehängt: MBR/GPT, fatMount auf LBA 2048 (…)".
+    const std::string& lastMountInfo() const { return mountInfo_; }
     void unmountAll();
 
     bool listDir(const std::string& path, std::vector<DirEntry>& out) override;
@@ -20,4 +23,5 @@ public:
 private:
     bool sdMounted_ = false;
     bool usbMounted_ = false;
+    std::string mountInfo_;
 };

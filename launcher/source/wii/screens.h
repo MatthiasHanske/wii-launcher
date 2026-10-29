@@ -147,7 +147,7 @@ Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::v
 void drawMain(const UiState& s, const Library& lib, const std::vector<const Game*>& recent,
               Covers& covers, const Hit& hover, float slide);
 // "USB-Platte nicht gefunden" mit Knopf "Erneut suchen".
-void drawNoUsb(const Hit& hover);
+void drawNoUsb(const Hit& hover, const std::string& reason);
 // Overlay o mit Deckkraft alpha (0..1, Ein-/Ausblenden), inklusive Abdunklung.
 void drawOverlay(Overlay o, const UiState& s, const Library& lib, float alpha);
 // Abdunklung + Panel mit Titel und Grund (Startfehler).

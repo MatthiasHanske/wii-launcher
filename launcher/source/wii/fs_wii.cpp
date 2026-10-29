@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <optional>
+#include <string>
 
 #include "core/gpt.h"
 
@@ -68,30 +69,55 @@ bool WiiFs::mountSd() {
 }
 
 bool WiiFs::mountUsb(int retries, int delayMs) {
-    if (usbMounted_) return true;
+    if (usbMounted_) {
+        mountInfo_ = "bereits eingeh\xC3\xA4ngt";
+        return true;
+    }
     // Wiederholt nur, solange die Platte nicht bereit (nicht lesbar) ist. Sobald sie lesbar
     // ist, entscheidet ein Durchlauf: fatMount auf der erkannten LBA, sonst einmal
     // fatMountSimple; ein erneuter Versuch auf derselben LBA ändert nichts. Nach Ablauf aller
     // Durchläufe ohne lesbare Platte noch ein letzter fatMountSimple.
+    int notStarted = 0, notInserted = 0, notReadable = 0;
     for (int attempt = 0; attempt < retries; ++attempt) {
         if (attempt > 0) usleep(static_cast<useconds_t>(delayMs) * 1000);
-        if (!__io_usbstorage.startup() || !__io_usbstorage.isInserted()) continue;
+        if (!__io_usbstorage.startup()) {
+            ++notStarted;
+            continue;
+        }
+        if (!__io_usbstorage.isInserted()) {
+            ++notInserted;
+            continue;
+        }
 
         bool readOk = false;
         std::optional<uint64_t> lba = probeUsbPartition(readOk);
-        if (!readOk) continue;  // Platte noch nicht bereit
+        if (!readOk) {
+            ++notReadable;
+            continue;  // Platte noch nicht bereit
+        }
+        const std::string at = " (Versuch " + std::to_string(attempt + 1) + ", Sektor " +
+                               std::to_string(__io_usbstorage_sector_size) + " B)";
         if (lba && *lba <= UINT32_MAX &&
             fatMount("usb", &__io_usbstorage, static_cast<sec_t>(*lba), 8, 64)) {
             usbMounted_ = true;
+            mountInfo_ = "eingeh\xC3\xA4ngt: MBR/GPT, fatMount auf LBA " + std::to_string(*lba) + at;
             return true;
         }
         // Lesbar, aber keine Partition erkannt (z. B. Superfloppy) oder kein FAT auf der
         // erkannten LBA: libfat einmal selbst suchen lassen, dann aufhören.
         usbMounted_ = fatMountSimple("usb", &__io_usbstorage);
+        std::string why = lba ? "kein FAT auf LBA " + std::to_string(*lba) : std::string("keine Partition erkannt");
+        mountInfo_ = (usbMounted_ ? "eingeh\xC3\xA4ngt: fatMountSimple, " : "Kein FAT-Laufwerk: ") + why +
+                     (usbMounted_ ? "" : ", fatMountSimple fehlgeschlagen") + at;
         return usbMounted_;
     }
     // Letzter Versuch nach Ablauf aller Durchläufe.
     usbMounted_ = fatMountSimple("usb", &__io_usbstorage);
+    std::string counts = std::to_string(retries) + " Versuche: Start fehlgeschlagen " + std::to_string(notStarted) +
+                         ", nicht eingesteckt " + std::to_string(notInserted) + ", nicht lesbar " +
+                         std::to_string(notReadable);
+    mountInfo_ = usbMounted_ ? "eingeh\xC3\xA4ngt: letzter fatMountSimple nach " + counts
+                             : "Platte nicht bereit nach " + counts + ", fatMountSimple fehlgeschlagen";
     return usbMounted_;
 }
 
