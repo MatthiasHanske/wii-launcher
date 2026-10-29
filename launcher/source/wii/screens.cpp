@@ -449,7 +449,7 @@ void drawMain(const UiState& s, const Library& lib, const std::vector<const Game
 
     // Tastenhinweise (Entscheidung des Leads: nur diese drei, klein und gedämpft)
     {
-        const char* hints[3] = {"+ Systeme", "\xE2\x88\x92 Suche", "1/2 Seite"};
+        const char* hints[3] = {"+ Systeme", "\xE2\x80\x93 Suche", "1/2 Seite"};
         float widths[3], total = 0;
         for (int i = 0; i < 3; ++i) total += widths[i] = gfx::textWidth(kSizeSmall, hints[i]);
         float gap = std::clamp((m.leftW - total) / 2, 8.0f, 24.0f);
