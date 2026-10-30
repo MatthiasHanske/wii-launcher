@@ -19,6 +19,11 @@ struct LaunchPlan {
 
 LaunchPlan makeLaunchPlan(const Game& game, IFileSystem& fs);
 
+// true, wenn makeLaunchPlan Dateien aus game.dir liest (DOSBox: Ordnerinhalt, autoexec.txt).
+// Der Launcher hängt die USB-Platte nach dem Scan aus und muss sie dafür kurz einhängen.
+// Alle anderen Pläne bestehen nur aus Pfaden oder lesen von der SD.
+bool launchReadsGameDir(const Game& game);
+
 // Startbefehl fuer DOSBox: erste Zeile von autoexec.txt > einzige .BAT/.EXE > beste
 // Namensaehnlichkeit zum Ordnernamen (mind. 3 Zeichen, .BAT vor .EXE) > leer.
 std::string pickDosCommand(const std::vector<DirEntry>& entries, const std::string& folderName,

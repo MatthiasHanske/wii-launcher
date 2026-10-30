@@ -84,6 +84,7 @@ bool WiiFs::mountUsb(int retries, int delayMs) {
             ++notStarted;
             continue;
         }
+        usbStarted_ = true;
         if (!__io_usbstorage.isInserted()) {
             ++notInserted;
             continue;
@@ -121,13 +122,21 @@ bool WiiFs::mountUsb(int retries, int delayMs) {
     return usbMounted_;
 }
 
+void WiiFs::unmountUsb() {
+    // fatUnmount schreibt den Cache zurück, schließt das Gerät aber nicht. shutdown schließt
+    // es (USBStorage_Close), ist ohne offenes Gerät ein No-op; die Flags verhindern trotzdem
+    // jeden zweiten Aufruf.
+    if (usbMounted_) fatUnmount("usb:");
+    if (usbStarted_ || usbMounted_) __io_usbstorage.shutdown();
+    usbMounted_ = false;
+    usbStarted_ = false;
+}
+
 void WiiFs::unmountAll() {
-    fatUnmount("sd:");
-    fatUnmount("usb:");
-    __io_usbstorage.shutdown();
+    unmountUsb();
+    fatUnmount("sd:");  // No-op, wenn nicht eingehängt
     __io_wiisd.shutdown();
     sdMounted_ = false;
-    usbMounted_ = false;
 }
 
 bool WiiFs::listDir(const std::string& path, std::vector<DirEntry>& out) {

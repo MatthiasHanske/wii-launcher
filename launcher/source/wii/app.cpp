@@ -246,7 +246,10 @@ void logScan(const std::string& root, const std::vector<Game>& games) {
 }
 
 // usb:/ plus settings.extraRoot (z. B. sd:/launcher/mock für Dolphin). Ohne USB und ohne
-// extraRoot: Fehlerbild "USB-Platte nicht gefunden".
+// extraRoot: Fehlerbild "USB-Platte nicht gefunden". Hängt die USB-Platte danach aus: Cover,
+// recent.txt, Einstellungen und Startprogramme liegen auf der SD, und das gestartete
+// Programm (USB Loader GX) soll die Platte unbenutzt vorfinden. Wer später usb:/ liest
+// (Retry, DOSBox-Startplan), hängt sie selbst wieder ein.
 void App::scanAll(bool usb) {
     if (usb || !settings_.extraRoot.empty()) messageFrame(std::string("Lese Spieleliste ") + kEllipsis);
     std::vector<Game> games;
@@ -259,6 +262,10 @@ void App::scanAll(bool usb) {
         logScan(settings_.extraRoot, extra);
         games.insert(games.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
     }
+    // Auch ohne Mount: schließt ein Gerät, das mountUsb geöffnet, aber nicht eingehängt hat.
+    const bool wasMounted = fs_.usbMounted();
+    fs_.unmountUsb();
+    if (wasMounted) diag::logf("USB: ausgeh\xC3\xA4ngt nach Scan");
     state_.noUsb = !usb && settings_.extraRoot.empty();
     if (state_.noUsb) diag::logf("Bild \"USB-Platte nicht gefunden\": %s", usbInfo_.c_str());
     rebuildLibrary(std::move(games));
@@ -344,7 +351,20 @@ void App::handle(const Command& c) {
 
 void App::launch(const Game& g) {
     const std::string title = g.title;
+    // USB ist seit dem Scan ausgehängt. Nur der DOSBox-Plan liest den Spielordner; dafür
+    // kurz einhängen. Ohne Platte entsteht eine dosbox.conf ohne Startbefehl (DOSBox-Prompt).
+    const bool needUsb = launchReadsGameDir(g) && g.dir.compare(0, 5, "usb:/") == 0;
+    if (needUsb) {
+        messageFrame(std::string("Suche USB-Platte ") + kEllipsis);
+        bool usb = fs_.mountUsb(3, 500);
+        diag::logf("USB f\xC3\xBCr Startplan: %s", fs_.lastMountInfo().c_str());
+        if (!usb) diag::logf("USB f\xC3\xBCr Startplan fehlt: Spielordner nicht lesbar, kein Startbefehl");
+    }
     LaunchPlan plan = makeLaunchPlan(g, fs_);
+    if (needUsb) {
+        fs_.unmountUsb();
+        diag::logf("USB: ausgeh\xC3\xA4ngt nach Startplan");
+    }
     std::string argList;
     for (const std::string& a : plan.args) argList += " [" + a + "]";
     diag::logf("Befehl Launch: \"%s\" system=%s dir=%s file=%s dol=%s quickBoot=%d args=%u%s", title.c_str(),
@@ -427,7 +447,10 @@ void App::retryUsb() {
     bool usb = fs_.mountUsb(3, 500);
     usbInfo_ = fs_.lastMountInfo();
     diag::logf("USB (erneut): %s", usbInfo_.c_str());
-    if (!usb) return;
+    if (!usb) {
+        fs_.unmountUsb();  // ein evtl. geöffnetes Gerät wieder schließen
+        return;
+    }
     scanAll(true);
     covers_.forgetFailures();
     lastFrame_ = nowMs();

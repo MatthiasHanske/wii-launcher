@@ -200,6 +200,12 @@ std::string pickDosCommand(const std::vector<DirEntry>& entries, const std::stri
     return bestScore >= 3 ? best : "";
 }
 
+namespace {
+bool isScummVm(const Game& g) { return g.system == System::Adventure && startsWith(g.dir, "usb:/scummvm/"); }
+}  // namespace
+
+bool launchReadsGameDir(const Game& g) { return g.system == System::Adventure && !isScummVm(g); }
+
 LaunchPlan makeLaunchPlan(const Game& g, IFileSystem& fs) {
     LaunchPlan p;
     switch (g.system) {
@@ -223,7 +229,7 @@ LaunchPlan makeLaunchPlan(const Game& g, IFileSystem& fs) {
             p.filesToWrite.push_back({kNot64Config, not64Config(fs)});
             return p;
         case System::Adventure:
-            if (startsWith(g.dir, "usb:/scummvm/")) {
+            if (isScummVm(g)) {
                 p.dolPath = "sd:/apps/scummvm/boot.elf";
                 p.args = {"--auto-detect", "--path=" + g.dir, "--extrapath=sd:/apps/scummvm",
                           "--themepath=sd:/apps/scummvm"};

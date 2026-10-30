@@ -134,6 +134,17 @@ TEST(launch_scummvm) {
     CHECK(p.filesToWrite.empty());
 }
 
+// --- Lesezugriff auf den Spielordner (USB nach dem Scan ausgehängt) ---
+
+TEST(launch_reads_game_dir_only_for_dosbox) {
+    CHECK(launchReadsGameDir(mkGame(System::Adventure, "usb:/dosbox/SimCity 2000")));
+    CHECK(!launchReadsGameDir(mkGame(System::Adventure, "usb:/scummvm/Monkey Island")));
+    CHECK(!launchReadsGameDir(mkGame(System::Wii, "usb:/wbfs/Mario Kart [RMCP01]", "", "RMCP01")));
+    CHECK(!launchReadsGameDir(mkGame(System::SNES, "usb:/snes9xgx/roms", "Zelda.sfc")));
+    CHECK(!launchReadsGameDir(mkGame(System::N64, "usb:/not64/roms", "Mario64.z64")));
+    CHECK(!launchReadsGameDir(mkGame(System::Sega, "usb:/genplus/roms", "Sonic.md", "", "md")));
+}
+
 // --- DOSBox ---
 
 TEST(launch_dosbox_simcity_without_autoexec) {
