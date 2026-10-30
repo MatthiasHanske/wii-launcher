@@ -150,6 +150,7 @@ void App::run() {
     if (!sdOk_) abortToWiiMenu("SD nicht eingeh\xC3\xA4ngt");  // ohne SD kein Log
     diag::logInit();
     diag::logf("SD eingeh\xC3\xA4ngt");
+    diag::logf("Start: %s", iosStateText().c_str());
     bool gfxOk = gfx::init();
     diag::logf("gfx::init: %s", gfxOk ? "ok" : "FEHLER");
     if (!gfxOk) abortToWiiMenu("Grafik nicht initialisiert");

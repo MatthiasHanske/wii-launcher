@@ -15,5 +15,8 @@ void logInit();
 void logf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 // Ab jetzt nichts mehr schreiben (vor WiiFs::unmountAll).
 void logClose();
+// Nach logClose wieder schreiben, wenn die SD neu eingehängt ist (bootDol nach dem
+// IOS-Reload). Ohne vorheriges logInit wirkungslos.
+void logReopen();
 
 }  // namespace diag

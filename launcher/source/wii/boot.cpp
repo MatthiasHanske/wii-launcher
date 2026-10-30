@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <wiiuse/wpad.h>
 
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -272,6 +273,17 @@ void clearHbcStub() {
 
 }  // namespace
 
+std::string iosStateText() {
+    const s32 version = IOS_GetVersion();
+    const s32 revision = IOS_GetRevision();
+    const u32 ahbprot = *reinterpret_cast<volatile u32*>(0xcd800064);
+    char buf[128];
+    std::snprintf(buf, sizeof buf, "IOS%d v%d, AHBPROT %s (0x%08X%s)", static_cast<int>(version),
+                  static_cast<int>(revision), ahbprot == 0xFFFFFFFF ? "aus" : "an", static_cast<unsigned>(ahbprot),
+                  ahbprot == 0xFFFFFFFF ? ", volle Hardware-Rechte" : "");
+    return buf;
+}
+
 bool canBoot(const LaunchPlan& plan, WiiFs& fs, std::string& reason) {
     if (plan.dolPath.empty()) {
         reason = "Kein Startprogramm bekannt";
@@ -361,12 +373,32 @@ bool bootDol(const LaunchPlan& plan, WiiFs& fs, std::string& reason) {
     VIDEO_WaitVSync();
 
     WPAD_Shutdown();
-    // Letzte Logzeile: danach sind die Geräte ausgehängt.
-    diag::logf("bootDol: Sprung");
+    const bool reload = ios58Installed();
+    diag::logf("bootDol: vor IOS-Reload: %s; IOS58 %s", iosStateText().c_str(),
+               reload ? "installiert, wird neu geladen" : "nicht installiert, kein Reload");
     diag::logClose();
+    // fat (SD, USB) und das USB-Gerät zu; WPAD ist schon aus. Danach hält libogc keine
+    // Geräte-Handles mehr, nur ES/STM, die IOS_ReloadIOS selbst schließt und neu öffnet.
     fs.unmountAll();
 
-    if (IOS_GetVersion() != 58 && ios58Installed()) IOS_ReloadIOS(58);  // Fehler egal
+    // Wie HBC, WiiFlow und USB Loader GX: immer ein frisches IOS58, auch wenn schon 58 läuft.
+    // Sonst erbt das Programm den IOS-Zustand des Launchers (USB-Stack, offene Ressourcen),
+    // und USB Loader GX fand die Platte nicht (TV-Test 2026-10-30).
+    s32 reloadResult = 0;
+    if (reload) reloadResult = IOS_ReloadIOS(58);
+
+    // Ergebnis ins Log: SD unter dem neuen IOS kurz einhängen (der HBC liest nach dem
+    // IOS-Reload ebenso von der SD), schreiben, wieder aushängen. Klappt das nicht, bleibt
+    // "vor IOS-Reload" die letzte Zeile. Danach nur noch Speicher, Cache, GX und
+    // SYS_ResetSystem (ES/STM, von IOS_ReloadIOS neu geöffnet).
+    if (fs.mountSd()) {
+        diag::logReopen();
+        if (reload) diag::logf("bootDol: IOS_ReloadIOS(58) = %d", static_cast<int>(reloadResult));
+        diag::logf("bootDol: vor Sprung: %s", iosStateText().c_str());
+        diag::logf("bootDol: Sprung");
+        diag::logClose();
+    }
+    fs.unmountAll();
 
     writeArgv(args, withArgv);
 

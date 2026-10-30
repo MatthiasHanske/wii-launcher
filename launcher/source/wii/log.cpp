@@ -24,6 +24,7 @@ constexpr long kMaxSize = 200 * 1024;
 
 enum class State { Pending, Open, Closed };
 State gState = State::Pending;
+bool gReopenable = false;  // logClose nach logInit: logReopen darf wieder öffnen
 std::string gPending;  // Zeilen vor logInit
 uint64_t gStartMs = 0;
 
@@ -74,6 +75,13 @@ void logf(const char* fmt, ...) {
     else append(line);
 }
 
-void logClose() { gState = State::Closed; }
+void logClose() {
+    if (gState == State::Open) gReopenable = true;
+    gState = State::Closed;
+}
+
+void logReopen() {
+    if (gState == State::Closed && gReopenable) gState = State::Open;
+}
 
 }  // namespace diag
