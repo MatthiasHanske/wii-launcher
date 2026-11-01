@@ -13,10 +13,6 @@ int clampi(int v, int lo, int hi) {
 
 int visibleCount(const Library& lib) { return static_cast<int>(lib.visible().size()); }
 
-int carouselCount(const std::vector<const Game*>& recent, const Library& lib) {
-    return recent.empty() ? visibleCount(lib) : static_cast<int>(recent.size());
-}
-
 Command launch(const Game* g) {
     Command c;
     if (g) {
@@ -32,8 +28,8 @@ Command simple(Command::Kind k) {
     return c;
 }
 
-// Indizes in gueltige Bereiche holen, falls sich Library oder recent geaendert haben.
-void normalize(UiState& s, Library& lib, const std::vector<const Game*>& recent) {
+// Indizes in gueltige Bereiche holen, falls sich die Library geaendert hat.
+void normalize(UiState& s, Library& lib) {
     int tabCount = 1 + static_cast<int>(lib.tabs().size());
     if (s.tabIndex < 0 || s.tabIndex >= tabCount) {
         s.tabIndex = 0;
@@ -41,11 +37,11 @@ void normalize(UiState& s, Library& lib, const std::vector<const Game*>& recent)
     }
     s.listIndex = clampi(s.listIndex, 0, visibleCount(lib) - 1);
     s.letterIndex = clampi(s.letterIndex, 0, static_cast<int>(lib.letters().size()) - 1);
-    s.carouselIndex = clampi(s.carouselIndex, 0, carouselCount(recent, lib) - 1);
+    s.carouselIndex = clampi(s.carouselIndex, 0, visibleCount(lib) - 1);
+    if (!s.listOpen && (s.focus == Focus::List || s.focus == Focus::Letters)) s.focus = Focus::Carousel;
     s.keyboardIndex = clampi(s.keyboardIndex, 0, static_cast<int>(keyboardKeys().size()) - 1);
     s.homeIndex = clampi(s.homeIndex, 0, static_cast<int>(homeEntries().size()) - 1);
     s.systemsIndex = clampi(s.systemsIndex, 0, kSystemCount - 1);
-    if (s.carouselPreview && !s.systems.get(s.carouselPreview->system)) s.carouselPreview = nullptr;
     if (s.overlay == Overlay::Search) {
         int n = static_cast<int>(searchResults(s, lib).size());
         if (n == 0) s.searchInResults = false;
@@ -56,29 +52,59 @@ void normalize(UiState& s, Library& lib, const std::vector<const Game*>& recent)
     }
 }
 
+// Auswahl in der Liste: das Mittelcover zeigt immer dasselbe Spiel.
 void selectList(UiState& s, const Library& lib, int index) {
     if (index < 0 || index >= visibleCount(lib)) return;
     s.listIndex = index;
-    s.carouselPreview = lib.visible()[index];
+    s.carouselIndex = index;
+}
+
+// Buchstabe des aktuell gewaehlten Spiels in letters() suchen.
+void syncLetterToList(UiState& s, const Library& lib) {
+    if (s.listIndex < 0 || s.listIndex >= visibleCount(lib)) return;
+    char c = lib.visible()[s.listIndex]->letter;
+    std::vector<char> letters = lib.letters();
+    for (size_t i = 0; i < letters.size(); ++i)
+        if (letters[i] == c) s.letterIndex = static_cast<int>(i);
+}
+
+// Nach Tab- oder Systemwechsel: g in der neuen visible() suchen (Zeigervergleich), sonst 0.
+void followGame(UiState& s, const Library& lib, const Game* g) {
+    const auto& vis = lib.visible();
+    s.carouselIndex = 0;
+    for (size_t i = 0; i < vis.size(); ++i)
+        if (vis[i] == g) s.carouselIndex = static_cast<int>(i);
+    s.listIndex = s.carouselIndex;
+    s.letterIndex = 0;
+    syncLetterToList(s, lib);
 }
 
 void selectTab(UiState& s, Library& lib, int index) {
     std::vector<System> tabs = lib.tabs();
     if (index < 0 || index > static_cast<int>(tabs.size()) || index == s.tabIndex) return;
+    const Game* g = carouselGame(s, lib);
     s.tabIndex = index;
     lib.setTab(index == 0 ? std::nullopt : std::optional<System>(tabs[index - 1]));
-    s.listIndex = 0;
-    s.letterIndex = 0;
-    s.carouselPreview = nullptr;
+    followGame(s, lib, g);
 }
 
-// Mit aktiver Vorschau loescht der erste Schritt nur die Vorschau, Index bleibt.
-void moveCarousel(UiState& s, const std::vector<const Game*>& recent, const Library& lib, int delta) {
-    if (s.carouselPreview) {
-        s.carouselPreview = nullptr;
-        return;
-    }
-    s.carouselIndex = clampi(s.carouselIndex + delta, 0, carouselCount(recent, lib) - 1);
+// Fächer blaettern; die (ggf. offene) Liste folgt.
+void moveCarousel(UiState& s, const Library& lib, int delta) {
+    s.carouselIndex = clampi(s.carouselIndex + delta, 0, visibleCount(lib) - 1);
+    s.listIndex = s.carouselIndex;
+    syncLetterToList(s, lib);
+}
+
+void openList(UiState& s, const Library& lib) {
+    s.listOpen = true;
+    s.listIndex = s.carouselIndex;
+    s.focus = Focus::List;
+    syncLetterToList(s, lib);
+}
+
+void closeList(UiState& s) {
+    s.listOpen = false;
+    s.focus = Focus::Carousel;
 }
 
 void jumpLetter(UiState& s, const Library& lib, int index) {
@@ -99,17 +125,9 @@ void page(UiState& s, const Library& lib, int delta) {
     selectList(s, lib, std::min(next * Library::kPageSize + row, n - 1));
 }
 
-// Buchstabe des aktuell gewaehlten Spiels in letters() suchen.
-void syncLetterToList(UiState& s, const Library& lib) {
-    if (s.listIndex >= visibleCount(lib)) return;
-    char c = lib.visible()[s.listIndex]->letter;
-    std::vector<char> letters = lib.letters();
-    for (size_t i = 0; i < letters.size(); ++i)
-        if (letters[i] == c) s.letterIndex = static_cast<int>(i);
-}
-
 Command toggleSystem(UiState& s, Library& lib, int sys) {
     if (sys < 0 || sys >= kSystemCount) return Command();
+    const Game* g = carouselGame(s, lib);
     std::vector<System> before = lib.tabs();
     std::optional<System> current;
     if (s.tabIndex > 0 && s.tabIndex <= static_cast<int>(before.size())) current = before[s.tabIndex - 1];
@@ -126,9 +144,7 @@ Command toggleSystem(UiState& s, Library& lib, int sys) {
             if (after[i] == *current) s.tabIndex = static_cast<int>(i) + 1;
         if (s.tabIndex == 0) lib.setTab(std::nullopt);
     }
-    s.listIndex = 0;
-    s.letterIndex = 0;
-    if (s.carouselPreview && !s.systems.get(s.carouselPreview->system)) s.carouselPreview = nullptr;
+    followGame(s, lib, g);
 
     Command c;
     c.kind = Command::ToggleSystem;
@@ -285,7 +301,7 @@ Command applyHome(UiState& s, Action a) {
     return Command();
 }
 
-Command applyMain(UiState& s, Library& lib, const std::vector<const Game*>& recent, Action a) {
+Command applyMain(UiState& s, Library& lib, Action a) {
     switch (s.focus) {
         case Focus::Tabs:
             switch (a) {
@@ -298,11 +314,22 @@ Command applyMain(UiState& s, Library& lib, const std::vector<const Game*>& rece
             break;
         case Focus::Carousel:
             switch (a) {
-                case Action::Left: moveCarousel(s, recent, lib, -1); break;
-                case Action::Right: moveCarousel(s, recent, lib, +1); break;
+                case Action::Left: moveCarousel(s, lib, -1); break;
+                case Action::Right: moveCarousel(s, lib, +1); break;
+                case Action::One:
+                    if (s.listOpen) page(s, lib, -1);
+                    else moveCarousel(s, lib, -Library::kPageSize);
+                    break;
+                case Action::Two:
+                    if (s.listOpen) page(s, lib, +1);
+                    else moveCarousel(s, lib, +Library::kPageSize);
+                    break;
                 case Action::Up: s.focus = Focus::Tabs; break;
-                case Action::Down: s.focus = Focus::List; break;
-                case Action::A: return launch(carouselGame(s, recent, lib));
+                case Action::Down: openList(s, lib); break;
+                case Action::B:
+                    if (s.listOpen) closeList(s);
+                    break;
+                case Action::A: return launch(carouselGame(s, lib));
                 default: break;
             }
             break;
@@ -326,6 +353,7 @@ Command applyMain(UiState& s, Library& lib, const std::vector<const Game*>& rece
                 case Action::A:
                     if (s.listIndex < n) return launch(lib.visible()[s.listIndex]);
                     break;
+                case Action::B: closeList(s); break;
                 default: break;
             }
             break;
@@ -336,9 +364,9 @@ Command applyMain(UiState& s, Library& lib, const std::vector<const Game*>& rece
                 case Action::Up: s.letterIndex = clampi(s.letterIndex - 1, 0, n - 1); break;
                 case Action::Down: s.letterIndex = clampi(s.letterIndex + 1, 0, n - 1); break;
                 case Action::A: jumpLetter(s, lib, s.letterIndex); break;
-                case Action::Left: s.focus = Focus::Carousel; break;
-                case Action::Right:
-                case Action::B: s.focus = Focus::List; break;
+                case Action::Left:
+                case Action::B: closeList(s); break;
+                case Action::Right: s.focus = Focus::List; break;
                 default: break;
             }
             break;
@@ -347,7 +375,7 @@ Command applyMain(UiState& s, Library& lib, const std::vector<const Game*>& rece
     return Command();
 }
 
-Command applyClick(UiState& s, Library& lib, const std::vector<const Game*>& recent, Region r, int idx) {
+Command applyClick(UiState& s, Library& lib, Region r, int idx) {
     if (r == Region::Retry) return simple(Command::Retry);
 
     if (s.overlay != Overlay::None) {
@@ -383,6 +411,13 @@ Command applyClick(UiState& s, Library& lib, const std::vector<const Game*>& rec
     }
 
     switch (r) {
+        case Region::None:
+            if (s.listOpen) closeList(s);
+            break;
+        case Region::ListToggle:
+            if (s.listOpen) closeList(s);
+            else openList(s, lib);
+            break;
         case Region::Tab:
             if (idx >= 0 && idx <= static_cast<int>(lib.tabs().size())) {
                 selectTab(s, lib, idx);
@@ -390,18 +425,16 @@ Command applyClick(UiState& s, Library& lib, const std::vector<const Game*>& rec
             }
             break;
         case Region::CarouselLeft:
-            s.focus = Focus::Carousel;
-            moveCarousel(s, recent, lib, -1);
-            break;
         case Region::CarouselRight:
+            if (idx != 1 && idx != 2) break;  // Abstand der Stufe
             s.focus = Focus::Carousel;
-            moveCarousel(s, recent, lib, +1);
+            moveCarousel(s, lib, r == Region::CarouselLeft ? -idx : idx);
             break;
         case Region::CarouselCenter:
             s.focus = Focus::Carousel;
-            return launch(carouselGame(s, recent, lib));
+            return launch(carouselGame(s, lib));
         case Region::ListRow: {
-            if (idx < 0 || idx >= Library::kPageSize) break;
+            if (!s.listOpen || idx < 0 || idx >= Library::kPageSize) break;
             int abs = (s.listIndex / Library::kPageSize) * Library::kPageSize + idx;
             if (abs >= visibleCount(lib)) break;
             bool wasSelected = s.focus == Focus::List && s.listIndex == abs;
@@ -410,7 +443,9 @@ Command applyClick(UiState& s, Library& lib, const std::vector<const Game*>& rec
             if (wasSelected) return launch(lib.visible()[abs]);
             break;
         }
-        case Region::Letter: jumpLetter(s, lib, idx); break;
+        case Region::Letter:
+            if (s.listOpen) jumpLetter(s, lib, idx);
+            break;
         case Region::SearchField: openOverlay(s, Overlay::Search); break;
         default: break;
     }
@@ -444,17 +479,14 @@ std::vector<const Game*> searchResults(const UiState& s, const Library& library)
     return library.search(s.query, kSearchResultLimit);
 }
 
-const Game* carouselGame(const UiState& s, const std::vector<const Game*>& recent, const Library& library) {
-    if (s.carouselPreview) return s.carouselPreview;
+const Game* carouselGame(const UiState& s, const Library& library) {
     int i = s.carouselIndex;
-    if (!recent.empty()) return (i >= 0 && i < static_cast<int>(recent.size())) ? recent[i] : nullptr;
     const auto& vis = library.visible();
     return (i >= 0 && i < static_cast<int>(vis.size())) ? vis[i] : nullptr;
 }
 
-Command apply(UiState& s, Library& library, const std::vector<const Game*>& recent, Action a,
-              std::optional<std::pair<int, int>> pointerHit) {
-    normalize(s, library, recent);
+Command apply(UiState& s, Library& library, Action a, std::optional<std::pair<int, int>> pointerHit) {
+    normalize(s, library);
     Command c;
     if (s.noUsb && s.overlay == Overlay::None) {
         // Fehlerbildschirm: A = Retry, Home oeffnet das Home-Menue, Retry-Klick, sonst nichts.
@@ -466,12 +498,12 @@ Command apply(UiState& s, Library& library, const std::vector<const Game*>& rece
                    pointerHit->first == static_cast<int>(Region::Retry)) {
             c = simple(Command::Retry);
         }
-        normalize(s, library, recent);
+        normalize(s, library);
         return c;
     }
     if (a == Action::PointerClick) {
         if (pointerHit && pointerHit->first >= 0 && pointerHit->first <= static_cast<int>(Region::Retry))
-            c = applyClick(s, library, recent, static_cast<Region>(pointerHit->first), pointerHit->second);
+            c = applyClick(s, library, static_cast<Region>(pointerHit->first), pointerHit->second);
     } else if (a == Action::Home) {
         // Home ersetzt jedes andere Overlay (z.B. Suche); B schliesst dann zum Hauptbildschirm,
         // nicht zurueck ins vorige Overlay.
@@ -485,11 +517,11 @@ Command apply(UiState& s, Library& library, const std::vector<const Game*>& rece
             case Overlay::None:
                 if (a == Action::Plus) openOverlay(s, Overlay::Systems);
                 else if (a == Action::Minus) openOverlay(s, Overlay::Search);
-                else c = applyMain(s, library, recent, a);
+                else c = applyMain(s, library, a);
                 break;
         }
     }
-    normalize(s, library, recent);
+    normalize(s, library);
     return c;
 }
 
@@ -500,16 +532,8 @@ void pointerHover(UiState& s, const Library& library, std::optional<std::pair<in
     if (pointerHit->first < 0 || pointerHit->first > static_cast<int>(Region::Retry)) return;
     switch (s.overlay) {
         case Overlay::None:
-            if (r == Region::ListRow && idx >= 0 && idx < Library::kPageSize) {
-                int abs = (s.listIndex / Library::kPageSize) * Library::kPageSize + idx;
-                if (abs < visibleCount(library)) {
-                    selectList(s, library, abs);
-                    s.focus = Focus::List;
-                }
-            } else if (r == Region::Letter && idx >= 0 && idx < static_cast<int>(library.letters().size())) {
-                s.letterIndex = idx;
-                s.focus = Focus::Letters;
-            }
+            // Hauptbild: Hover waehlt nichts aus (Zeiger wackelt), nur Klicks. Der Renderer
+            // hebt ueberfahrene Zeilen und Buchstaben selbst hervor.
             break;
         case Overlay::Search:
             if (r == Region::Key && idx >= 0 && idx < static_cast<int>(keyboardKeys().size())) {
