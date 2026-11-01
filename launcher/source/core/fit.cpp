@@ -12,27 +12,6 @@ Rect fitRect(float imgW, float imgH, const Rect& bounds) {
     return Rect{bounds.x + std::round((bounds.w - w) / 2), bounds.y + std::round((bounds.h - h) / 2), w, h};
 }
 
-CarouselGeometry carouselGeometry(const Rect& column, const Rect& center, float sideW, float sideH) {
-    using G = CarouselGeometry;
-    G g;
-    const float colRight = column.x + column.w;
-    const float centerRight = center.x + center.w;
-    const float gap = std::clamp((column.w - center.w - 2 * sideW) / 2, -G::kMaxOverlap, G::kMaxGap);
-    const float y = column.y + std::round((column.h - sideH) / 2);
-
-    const float leftX = std::max(center.x - gap - sideW, column.x);
-    if (center.x - leftX >= G::kMinVisible) {
-        g.left = Rect{leftX, y, sideW, sideH};
-        g.hitLeft = Rect{column.x, column.y, center.x - column.x, column.h};
-    }
-    const float rightX = std::min(centerRight + gap, colRight - sideW);
-    if (rightX + sideW - centerRight >= G::kMinVisible) {
-        g.right = Rect{rightX, y, sideW, sideH};
-        g.hitRight = Rect{centerRight, column.y, colRight - centerRight, column.h};
-    }
-    return g;
-}
-
 namespace {
 
 // Abstände einer Fächerseite, gemessen von der Mittelkante nach außen. stages = 0, 1 oder 2.

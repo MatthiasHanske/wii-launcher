@@ -39,8 +39,11 @@ constexpr size_t kCoverBudget = 16u * 1024 * 1024;
 
 constexpr uint64_t kRepeatDelayMs = 400;
 constexpr uint64_t kRepeatMs = 120;
+constexpr uint64_t kRepeatFastMs = 60;
+constexpr int kRepeatFastAfter = 12;  // Wiederholungen bis zur Beschleunigung
 constexpr float kOverlayFadeMs = 150;
 constexpr float kSlideMs = 150;
+constexpr float kListMs = 150;
 constexpr float kLeaveFadeMs = 200;
 constexpr uint64_t kErrorMs = 3000;
 constexpr float kErrorFadeMs = 150;
@@ -58,24 +61,34 @@ void onPower() { gPowerRequested = true; }
 void onWiimotePower(s32 /*chan*/) { gPowerRequested = true; }
 void onReset(u32 /*irq*/, void* /*ctx*/) { gResetRequested = true; }
 
-// Wiederholung für gehaltenes Steuerkreuz: erst nach 400 ms, dann alle 120 ms.
+// Eingabe-Aktion mit Zeigertreffer; repeat = aus der Tastenwiederholung, nicht erster Druck.
+struct InputAction {
+    Action action;
+    screens::Hit hit;
+    bool repeat = false;
+};
+
+// Wiederholung für gehaltenes Steuerkreuz: erst nach 400 ms, dann alle 120 ms, nach 12
+// Wiederholungen alle 60 ms.
 class KeyRepeat {
 public:
-    void update(const InputState& in, uint64_t now, std::vector<Action>& out) {
+    void update(const InputState& in, uint64_t now, std::vector<InputAction>& out) {
         for (const Dir& d : kDirs) {
             if (in.pressed & d.button) {
-                out.push_back(d.action);
+                out.push_back({d.action, std::nullopt, false});
                 button_ = d.button;
                 action_ = d.action;
                 next_ = now + kRepeatDelayMs;
+                count_ = 0;
             }
         }
         if (!button_ || (in.pressed & button_)) return;
         if (!(in.held & button_)) {
             button_ = 0;
         } else if (now >= next_) {
-            out.push_back(action_);
-            next_ = now + kRepeatMs;
+            out.push_back({action_, std::nullopt, true});
+            ++count_;
+            next_ = now + (count_ >= kRepeatFastAfter ? kRepeatFastMs : kRepeatMs);
         }
     }
 
@@ -92,6 +105,7 @@ private:
     uint32_t button_ = 0;
     Action action_ = Action::Up;
     uint64_t next_ = 0;
+    int count_ = 0;
 };
 
 class App {
@@ -103,10 +117,10 @@ private:
     void scanAll(bool usb);
     void rebuildLibrary(std::vector<Game> games);
     void refreshRecent();
+    void startPosition();
     void saveSettings();
 
-    void collectActions(const InputState& in, const screens::Hit& hit, uint64_t now,
-                        std::vector<std::pair<Action, screens::Hit>>& out);
+    void collectActions(const InputState& in, const screens::Hit& hit, uint64_t now, std::vector<InputAction>& out);
     void handle(const Command& c);
     void launch(const Game& g);
     void showLaunchError(const std::string& title, const std::string& detail);
@@ -135,6 +149,7 @@ private:
     Overlay shownOverlay_ = Overlay::None;
     float overlayAlpha_ = 0;
     float slideFrom_ = 0;
+    float listAnim_ = 0;  // 0 = Liste zu, 1 = offen; folgt state_.listOpen
     uint64_t slideStart_ = 0;
     std::string errorTitle_, errorDetail_;
     uint64_t errorStart_ = 0, errorUntil_ = 0;
@@ -156,7 +171,7 @@ void App::run() {
     if (!gfxOk) abortToWiiMenu("Grafik nicht initialisiert");
     startup();
 
-    std::vector<std::pair<Action, screens::Hit>> actions;
+    std::vector<InputAction> actions;
     lastFrame_ = nowMs();
     while (true) {
         // Power wie Home -> "Ausschalten", Reset wie Home -> "Wii-Menü" (mit Priiloader-Magic).
@@ -168,7 +183,7 @@ void App::run() {
         uint64_t now = nowMs();
         InputState in = pollInput();
         screens::Hit hit;
-        if (in.pointerValid) hit = screens::hitTest(in.pointerX, in.pointerY, state_, *lib_, recent_, &covers_);
+        if (in.pointerValid) hit = screens::hitTest(in.pointerX, in.pointerY, state_, *lib_, &covers_);
         // Hover nur bei Wechsel der Region, sonst überschreibt der ruhende Zeiger das Steuerkreuz.
         // Während der Fehlermeldung kein Hover (sie sperrt die Eingabe).
         if (in.pointerValid && hit != lastHit_ && now >= errorUntil_) pointerHover(state_, *lib_, hit);
@@ -183,8 +198,12 @@ void App::run() {
         }
         for (const auto& a : actions) {
             int carouselBefore = state_.carouselIndex;
-            Command c = apply(state_, *lib_, recent_, a.first, a.second);
-            if (state_.carouselIndex != carouselBefore) {
+            Command c = apply(state_, *lib_, a.action, a.hit);
+            // Nur ein Einzeldruck gleitet; bei gehaltener Taste startete die Animation sonst
+            // alle 60 ms neu und zitterte.
+            if (a.repeat) {
+                slideFrom_ = 0;
+            } else if (state_.carouselIndex != carouselBefore) {
                 slideFrom_ = state_.carouselIndex > carouselBefore ? 1.0f : -1.0f;
                 slideStart_ = now;
             }
@@ -273,7 +292,6 @@ void App::scanAll(bool usb) {
 
 void App::rebuildLibrary(std::vector<Game> games) {
     // Alle Zeiger in die alte Library verwerfen, bevor sie zerstört wird.
-    state_.carouselPreview = nullptr;
     recent_.clear();
     lib_ = std::make_unique<Library>(std::move(games));
     lib_->setEnabled(state_.systems);
@@ -283,13 +301,24 @@ void App::rebuildLibrary(std::vector<Game> games) {
     state_.letterIndex = 0;
     state_.carouselIndex = 0;
     refreshRecent();
+    startPosition();
 }
 
-void App::refreshRecent() {
-    recent_ = recentForLibrary(recentEntries_, *lib_);
-    // apply() klemmt den Index erst bei der nächsten Eingabe; bis dahin bliebe die Mitte leer.
-    int count = static_cast<int>(recent_.empty() ? lib_->visible().size() : recent_.size());
-    state_.carouselIndex = std::max(0, std::min(state_.carouselIndex, count - 1));
+void App::refreshRecent() { recent_ = recentForLibrary(recentEntries_, *lib_); }
+
+// Fächer auf das zuletzt gespielte Spiel (recent_[0]) in visible(), sonst auf das erste.
+// Liste und Overlay zu.
+void App::startPosition() {
+    const auto& vis = lib_->visible();
+    int index = 0;
+    if (!recent_.empty())
+        for (size_t i = 0; i < vis.size(); ++i)
+            if (vis[i] == recent_[0]) index = static_cast<int>(i);
+    state_.carouselIndex = index;
+    state_.listIndex = index;
+    state_.listOpen = false;
+    state_.overlay = Overlay::None;
+    if (state_.focus == Focus::List || state_.focus == Focus::Letters) state_.focus = Focus::Carousel;
 }
 
 void App::saveSettings() {
@@ -297,32 +326,31 @@ void App::saveSettings() {
     if (sdOk_) fs_.writeText(kSettingsPath, serializeSettings(settings_));
 }
 
-void App::collectActions(const InputState& in, const screens::Hit& hit, uint64_t now,
-                         std::vector<std::pair<Action, screens::Hit>>& out) {
-    std::vector<Action> dpad;
-    repeat_.update(in, now, dpad);
-    for (Action a : dpad) out.emplace_back(a, std::nullopt);
+void App::collectActions(const InputState& in, const screens::Hit& hit, uint64_t now, std::vector<InputAction>& out) {
+    repeat_.update(in, now, out);
 
     if (in.pressed & WPAD_BUTTON_A) {
         // Regel für A (Entscheidung des Leads):
         // - Zeiger gültig: A wirkt nur auf das Ziel des Zeigers. Bedienelement -> PointerClick.
-        //   Außerhalb eines offenen Overlay-Panels (Region::None) -> PointerClick, schließt es.
-        //   Leere Panelfläche (nullopt) oder Hintergrund des Hauptbilds (Region::None ohne
-        //   Overlay) -> gar nichts, auch kein Action::A.
+        //   Außerhalb eines offenen Overlay-Panels oder der offenen Liste (Region::None) ->
+        //   PointerClick, schließt es bzw. sie. Leere Panel- oder Listenfläche (nullopt) oder
+        //   Hintergrund des Hauptbilds (Region::None ohne Overlay und Liste) -> gar nichts,
+        //   auch kein Action::A.
         // - Zeiger ungültig: Action::A auf die Auswahl des Steuerkreuzes.
         // - Ausnahme "USB-Platte nicht gefunden" ohne Overlay: A ist immer Retry (der Bildschirm
         //   verspricht "A: Erneut suchen"), egal wohin der Zeiger zeigt.
         if (!in.pointerValid || (state_.noUsb && state_.overlay == Overlay::None)) {
-            out.emplace_back(Action::A, std::nullopt);
-        } else if (hit && (hit->first != static_cast<int>(Region::None) || state_.overlay != Overlay::None)) {
-            out.emplace_back(Action::PointerClick, hit);
+            out.push_back({Action::A, std::nullopt});
+        } else if (hit && (hit->first != static_cast<int>(Region::None) || state_.overlay != Overlay::None ||
+                           state_.listOpen)) {
+            out.push_back({Action::PointerClick, hit});
         }
     }
     const std::pair<uint32_t, Action> buttons[] = {{WPAD_BUTTON_B, Action::B},     {WPAD_BUTTON_PLUS, Action::Plus},
                                                    {WPAD_BUTTON_MINUS, Action::Minus}, {WPAD_BUTTON_1, Action::One},
                                                    {WPAD_BUTTON_2, Action::Two},   {WPAD_BUTTON_HOME, Action::Home}};
     for (const auto& b : buttons)
-        if (in.pressed & b.first) out.emplace_back(b.second, std::nullopt);
+        if (in.pressed & b.first) out.push_back({b.second, std::nullopt});
 }
 
 void App::handle(const Command& c) {
@@ -335,7 +363,8 @@ void App::handle(const Command& c) {
         case Command::ToggleSystem:
             diag::logf("Befehl ToggleSystem: %s -> %s", systemName(c.system),
                        state_.systems.get(c.system) ? "an" : "aus");
-            // apply hat die Library schon umgeschaltet; nur speichern und Karussell neu filtern.
+            // apply hat die Library schon umgeschaltet und das Spiel des Fächers behalten; nur
+            // speichern und recent_ neu filtern.
             saveSettings();
             refreshRecent();
             break;
@@ -375,7 +404,7 @@ void App::launch(const Game& g) {
     diag::logf("canBoot: %s%s", bootable ? "ok" : "nein: ", reason.c_str());
     if (!bootable) {
         // Vor dem Point of no Return gescheitert: nichts geändert, kein Eintrag in "Zuletzt
-        // gespielt". Auswahl, Vorschau und offenes Overlay bleiben, nur die Meldung erscheint.
+        // gespielt". Auswahl, Liste und offenes Overlay bleiben, nur die Meldung erscheint.
         showLaunchError(title, reason);
         return;
     }
@@ -398,12 +427,10 @@ void App::launch(const Game& g) {
     // erfolgreich, also Lese-/Schreibfehler oder Datei zwischendurch geändert.
     bootDol(plan, fs_, reason);
     showLaunchError(title, reason);
-    // Karussell zeigt das gerade gewählte Spiel (jetzt vorn in recent): Vorschau weg,
-    // offenes Overlay (z. B. Suche) zu.
-    state_.carouselPreview = nullptr;
-    state_.overlay = Overlay::None;
-    state_.carouselIndex = 0;
+    // Fächer zeigt das gerade gewählte Spiel (jetzt vorn in recent), Liste und offenes
+    // Overlay (z. B. Suche) zu.
     refreshRecent();
+    startPosition();
 }
 
 void App::showLaunchError(const std::string& title, const std::string& detail) {
@@ -466,6 +493,8 @@ void App::animate(uint64_t now) {
         overlayAlpha_ = std::max(0.0f, overlayAlpha_ - dt / kOverlayFadeMs);
         if (overlayAlpha_ <= 0) shownOverlay_ = Overlay::None;
     }
+    if (state_.listOpen) listAnim_ = std::min(1.0f, listAnim_ + dt / kListMs);
+    else listAnim_ = std::max(0.0f, listAnim_ - dt / kListMs);
 }
 
 void App::drawScene(const InputState* in, const screens::Hit& hit, uint64_t now) {
@@ -479,8 +508,9 @@ void App::drawScene(const InputState* in, const screens::Hit& hit, uint64_t now)
             if (t >= 1) slideFrom_ = 0;
             else slide = slideFrom_ * (1 - t) * (1 - t);  // abbremsen
         }
-        screens::drawMain(state_, *lib_, recent_, covers_, state_.overlay == Overlay::None ? hit : std::nullopt,
-                          slide);
+        float l = listAnim_;
+        screens::drawMain(state_, *lib_, covers_, state_.overlay == Overlay::None ? hit : std::nullopt, slide,
+                          l * (2 - l));  // ease-out wie das Gleiten
     }
     float a = overlayAlpha_;
     screens::drawOverlay(shownOverlay_, state_, *lib_, a * (2 - a));  // weich auslaufend

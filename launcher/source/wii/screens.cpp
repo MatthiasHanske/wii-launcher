@@ -25,16 +25,20 @@ constexpr float kBarH = 44;                  // Leiste innerhalb des Sicherheits
 constexpr float kBarBottom = kSafe + kBarH;  // 76; Hintergrund der Leiste reicht bis y = 0
 constexpr float kPillH = 28;
 constexpr float kSearchW = 150;
+constexpr float kToggleGap = 8;              // Abstand Pille "Liste" - Suche
 constexpr float kSplit = 0.52f;              // Anteil der linken Spalte an der Inhaltsbreite
 
-// Vorschau: Cover werden per fitRect in Spaltenbreite x kCenterH eingepasst (hochkant
-// 160x224 wie die Wii/GC-Cover, quer bis zur vollen Spaltenbreite). kCenterW x kCenterH ist
-// das Standardformat der Platzhalter-Kachel. Darunter Titel (ab y 350) und Systemzeile
-// (bis etwa y 398); die Tastenhinweise beginnen bei kBottom - 18 = 430.
-constexpr float kCenterW = 160, kCenterH = 224;
-constexpr float kSideW = 88, kSideH = 123;   // Rahmen der Seitencover (Cover darin eingepasst)
-constexpr float kCarouselTop = 112;
-constexpr float kSlidePx = 36;               // Gleitweg des Karussells
+// Fächer: Mittelcover per fitRect in Fächerbreite x kCenterH (hochkant 160x224 wie die
+// Wii/GC-Cover, also etwa 171x240; quer bis zur vollen Fächerbreite). kStdW x kStdH ist das
+// Standardformat der Platzhalter-Kachel. Darunter Titel (ab y 354) und Systemzeile (bis etwa
+// y 402); die Tastenhinweise beginnen bei kBottom - 18 = 430.
+constexpr float kStdW = 160, kStdH = 224;
+constexpr float kCenterH = 240;
+constexpr float kCarouselTop = 100;
+const Rect kSideFrames[2] = {Rect{0, 0, 110, 154}, Rect{0, 0, 76, 106}};  // Stufe 1, Stufe 2
+constexpr uint32_t kSideDim[2] = {0x00000080, 0x000000A6};               // 50 %, 65 %
+constexpr uint32_t kSideDimHover[2] = {0x00000040, 0x00000080};          // eine Stufe heller
+constexpr float kSlidePx = 36;               // Gleitweg des Fächers
 
 constexpr float kListTop = 84;
 constexpr float kRowH = 36;
@@ -107,9 +111,10 @@ TopBarLayout barLayout(const Library& lib) {
     Cfg use = cfgs[3];
     float avail = 0;
     bool fits = false;
+    const float toggleW = std::round(gfx::textWidth(kSizeSmall, "Liste") + 24);
     for (const Cfg& c : cfgs) {
         float searchW = c.compact ? kPillH : kSearchW;
-        avail = W() - 2 * kSafe - searchW - 12;
+        avail = W() - 2 * kSafe - searchW - kToggleGap - toggleW - 12;
         float total = c.gap * (n - 1);
         for (float w : tw) total += w + 2 * c.pad;
         if (total <= avail) {
@@ -136,6 +141,7 @@ TopBarLayout barLayout(const Library& lib) {
     b.searchCompact = use.compact;
     float sw = use.compact ? kPillH : kSearchW;
     b.search = Rect{W() - kSafe - sw, y, sw, kPillH};
+    b.listToggle = Rect{b.search.x - kToggleGap - toggleW, y, toggleW, kPillH};
     return b;
 }
 
@@ -148,9 +154,17 @@ void drawBar(const TopBarLayout& b, const UiState& s, const Hit& hover) {
         bool active = static_cast<int>(i) == s.tabIndex;
         if (active && s.focus == Focus::Tabs && s.overlay == Overlay::None)
             roundRectR(inset(r, -3), kPillH / 2 + 3, kText);  // Fokusring um den aktiven Tab
-        uint32_t fill = active ? kAccent : (hitIs(hover, Region::Tab, static_cast<int>(i)) ? kChipHover : kChip);
+        uint32_t fill = active ? kAccentFill : (hitIs(hover, Region::Tab, static_cast<int>(i)) ? kChipHover : kChip);
         roundRectR(r, kPillH / 2, fill);
         textIn(r, kSizeSmall, active ? kWhite : kMuted, b.labels[i], true);
+    }
+
+    {
+        const Rect& t = b.listToggle;
+        bool hovered = hitIs(hover, Region::ListToggle);
+        uint32_t fill = s.listOpen ? (hovered ? kAccentFillHover : kAccentFill) : (hovered ? kChipHover : kChip);
+        roundRectR(t, kPillH / 2, fill);
+        textIn(t, kSizeSmall, s.listOpen ? kWhite : kMuted, "Liste", true);
     }
 
     const Rect& r = b.search;
@@ -185,13 +199,11 @@ Rect drawCover(Covers& covers, const Game& g, const Rect& r, bool mini, float al
     return r;
 }
 
-// Nachbarn des Karussells (links/rechts von carouselIndex), nullptr wenn keiner.
-void carouselSides(const UiState& s, const Library& lib, const std::vector<const Game*>& recent,
-                   const Game*& left, const Game*& right) {
-    const std::vector<const Game*>& source = recent.empty() ? lib.visible() : recent;
-    const int ci = s.carouselIndex, n = static_cast<int>(source.size());
-    left = (ci - 1 >= 0 && ci - 1 < n) ? source[ci - 1] : nullptr;
-    right = (ci + 1 >= 0 && ci + 1 < n) ? source[ci + 1] : nullptr;
+// Spiel im Abstand d (negativ = links) vom Mittelcover, nullptr wenn keins.
+const Game* fanGame(const UiState& s, const Library& lib, int d) {
+    const auto& vis = lib.visible();
+    const int i = s.carouselIndex + d;
+    return (i >= 0 && i < static_cast<int>(vis.size())) ? vis[i] : nullptr;
 }
 
 }  // namespace
@@ -258,31 +270,44 @@ void Covers::clear() { cache_.clear(); }
 
 // --- Layouts -------------------------------------------------------------------------------
 
-MainLayout mainLayout(const UiState& s, const Library& lib, float centerImgW, float centerImgH) {
+MainLayout mainLayout(const UiState& s, const Library& lib, float listT, float centerImgW, float centerImgH) {
     MainLayout m;
     m.bar = barLayout(lib);
+    listT = std::clamp(listT, 0.0f, 1.0f);
 
+    // Trennlinie bei offener Liste; die linke Spalte endet 14 px davor.
     const float contentW = W() - 2 * kSafe;
-    m.splitX = std::round(kSafe + contentW * kSplit);
-    m.leftX = kSafe;
-    m.leftW = m.splitX - 14 - kSafe;
-    m.labelY = 88;
+    const float splitX = std::round(kSafe + contentW * kSplit);
+    const float columnW = splitX - 14 - kSafe;
+    const float fanW = std::round(contentW + (columnW - contentW) * listT);
 
-    m.carArea = Rect{m.leftX, kCarouselTop, m.leftW, kCenterH};
+    m.carArea = Rect{kSafe, kCarouselTop, fanW, kCenterH};
     m.carCenter = fitRect(centerImgW, centerImgH, m.carArea);
-    if (m.carCenter.empty()) m.carCenter = fitRect(kCenterW, kCenterH, m.carArea);  // Standardformat
-    // Seitencover neben der tatsächlichen Mitte; ist außen kein Platz, rücken sie hinter die
-    // Mitte (bei 640 px schon im Hochformat) oder entfallen bei sehr breiten Covern.
-    CarouselGeometry car = carouselGeometry(m.carArea, m.carCenter, kSideW, kSideH);
-    m.carLeft = car.left;
-    m.carRight = car.right;
-    m.hitLeft = car.hitLeft;
-    m.hitRight = car.hitRight;
+    if (m.carCenter.empty()) m.carCenter = fitRect(kStdW, kStdH, m.carArea);  // Standardformat
+    // Je Seite nur so viele Stufen, wie es Spiele gibt; fehlende Stufen bekommen einen leeren
+    // Rahmen, damit die vorhandene Klickfläche bis zum Rand reicht.
+    Rect left[2], right[2];
+    for (int i = 0; i < 2; ++i) {
+        left[i] = fanGame(s, lib, -(i + 1)) ? kSideFrames[i] : Rect{};
+        right[i] = fanGame(s, lib, i + 1) ? kSideFrames[i] : Rect{};
+    }
+    FanGeometry fl = fanGeometry(m.carArea, m.carCenter, left);
+    FanGeometry fr = fanGeometry(m.carArea, m.carCenter, right);
+    for (int i = 0; i < 2; ++i) {
+        m.fan.left[i] = fl.left[i];
+        m.fan.hitLeft[i] = fl.hitLeft[i];
+        m.fan.right[i] = fr.right[i];
+        m.fan.hitRight[i] = fr.hitRight[i];
+    }
     m.titleY = kCarouselTop + kCenterH + 14;
     m.systemY = m.titleY + 30;
     m.hintsY = kBottom - 18;
 
-    const float lettersX = m.splitX + 14;
+    // Liste: gleitet um (1 - listT) * Breite nach rechts heraus.
+    const float panelW = W() - splitX;
+    const float off = std::round((1 - listT) * panelW);
+    m.listPanel = Rect{splitX + off, kListTop - 8, panelW, kBottom - (kListTop - 8)};
+    const float lettersX = m.listPanel.x + 14;
     std::vector<char> letters = lib.letters();
     for (int i = 0; i < kLetterCells; ++i) {
         int col = i / kLetterRows, row = i % kLetterRows;
@@ -296,7 +321,7 @@ MainLayout mainLayout(const UiState& s, const Library& lib, float centerImgW, fl
     }
 
     m.listX = lettersX + 2 * kLetterStep - 2 + 12;
-    m.listW = W() - kSafe - m.listX;
+    m.listW = W() - kSafe - (m.listX - off);
     for (int i = 0; i < Library::kPageSize; ++i) m.rows[i] = Rect{m.listX, kListTop + i * kRowH, m.listW, kRowH};
     int visible = static_cast<int>(lib.visible().size());
     int pageStart = (s.listIndex / Library::kPageSize) * Library::kPageSize;
@@ -365,8 +390,7 @@ NoUsbLayout noUsbLayout() {
 
 // --- Hit-Test ------------------------------------------------------------------------------
 
-Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::vector<const Game*>& recent,
-            const Covers* covers) {
+Hit hitTest(float x, float y, const UiState& s, const Library& lib, const Covers* covers) {
     const auto none = std::make_pair(static_cast<int>(Region::None), 0);
     auto hit = [](Region r, int i) { return Hit(std::make_pair(static_cast<int>(r), i)); };
 
@@ -402,90 +426,103 @@ Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::v
         return none;
     }
 
-    const Game* center = carouselGame(s, recent, lib);
+    const Game* center = carouselGame(s, lib);
     const Texture* centerTex = (covers && center) ? covers->peek(*center) : nullptr;
-    MainLayout m = centerTex ? mainLayout(s, lib, static_cast<float>(centerTex->w), static_cast<float>(centerTex->h))
-                             : mainLayout(s, lib);
+    const float listT = s.listOpen ? 1 : 0;  // Zielzustand, nicht die laufende Einblendung
+    MainLayout m = centerTex ? mainLayout(s, lib, listT, static_cast<float>(centerTex->w),
+                                          static_cast<float>(centerTex->h))
+                             : mainLayout(s, lib, listT);
     for (size_t i = 0; i < m.bar.tabs.size(); ++i)
         if (m.bar.tabs[i].contains(x, y)) return hit(Region::Tab, static_cast<int>(i));
+    if (m.bar.listToggle.contains(x, y)) return hit(Region::ListToggle, 0);
     if (m.bar.search.contains(x, y)) return hit(Region::SearchField, 0);
-    if (m.carCenter.contains(x, y)) return hit(Region::CarouselCenter, 0);
-    const Game *left = nullptr, *right = nullptr;
-    carouselSides(s, lib, recent, left, right);
-    if (left && m.hitLeft.contains(x, y)) return hit(Region::CarouselLeft, 0);
-    if (right && m.hitRight.contains(x, y)) return hit(Region::CarouselRight, 0);
-    for (int i = 0; i < m.rowCount; ++i)
-        if (m.rows[i].contains(x, y)) return hit(Region::ListRow, i);
-    for (int i = 0; i < kLetterCells; ++i)
-        if (m.letterIndex[i] >= 0 && m.letterCells[i].contains(x, y)) return hit(Region::Letter, m.letterIndex[i]);
+    if (s.listOpen && m.listPanel.contains(x, y)) {
+        for (int i = 0; i < m.rowCount; ++i)
+            if (m.rows[i].contains(x, y)) return hit(Region::ListRow, i);
+        for (int i = 0; i < kLetterCells; ++i)
+            if (m.letterIndex[i] >= 0 && m.letterCells[i].contains(x, y))
+                return hit(Region::Letter, m.letterIndex[i]);
+        return std::nullopt;  // in der Einblendung, aber auf keinem Bedienelement
+    }
+    if (center && m.carCenter.contains(x, y)) return hit(Region::CarouselCenter, 0);
+    for (int i = 0; i < 2; ++i) {
+        if (!m.fan.left[i].empty() && m.fan.hitLeft[i].contains(x, y)) return hit(Region::CarouselLeft, i + 1);
+        if (!m.fan.right[i].empty() && m.fan.hitRight[i].contains(x, y)) return hit(Region::CarouselRight, i + 1);
+    }
     return none;
 }
 
 // --- Zeichnen ------------------------------------------------------------------------------
 
-void drawMain(const UiState& s, const Library& lib, const std::vector<const Game*>& recent, Covers& covers,
-              const Hit& hover, float slide) {
-    // Das Mittelcover bestimmt die Geometrie des Karussells, deshalb zuerst holen (zählt zum
+void drawMain(const UiState& s, const Library& lib, Covers& covers, const Hit& hover, float slide, float listT) {
+    // Das Mittelcover bestimmt die Geometrie des Fächers, deshalb zuerst holen (zählt zum
     // Ladebudget dieses Bilds; drawCover trifft danach den Cache).
-    const Game* center = carouselGame(s, recent, lib);
+    const Game* center = carouselGame(s, lib);
     bool centerPending = false;
     const Texture* centerTex = center ? covers.cover(*center, centerPending) : nullptr;
-    MainLayout m = centerTex ? mainLayout(s, lib, static_cast<float>(centerTex->w), static_cast<float>(centerTex->h))
-                             : mainLayout(s, lib);
-    drawBar(m.bar, s, hover);
+    MainLayout m = centerTex ? mainLayout(s, lib, listT, static_cast<float>(centerTex->w),
+                                          static_cast<float>(centerTex->h))
+                             : mainLayout(s, lib, listT);
+    const bool main = s.overlay == Overlay::None;
+    drawBar(m.bar, s, main ? hover : Hit());
 
-    // Linke Spalte: Karussell
-    if (!recent.empty()) gfx::text(m.leftX, m.labelY, kSizeSmall, kMuted, "Zuletzt gespielt");
-
-    const Game *left = nullptr, *right = nullptr;
-    carouselSides(s, lib, recent, left, right);
-    // Gleiten: alles um dx versetzt, aber nie über die linke Spalte hinaus (breite Cover
-    // gleiten entsprechend kürzer, das Ausblenden der Mitte bleibt).
+    // Fächer. Gleiten: alles um dx versetzt, aber nie über die Fächerfläche hinaus (breite
+    // Cover gleiten entsprechend kürzer, das Ausblenden der Mitte bleibt).
     const float dx = std::round(slide * kSlidePx);
-    const float colL = m.carArea.x, colR = m.carArea.x + m.carArea.w;
-    auto shifted = [dx, colL, colR](const Rect& r) { return slideWithin(r, dx, colL, colR); };
+    const float areaL = m.carArea.x, areaR = m.carArea.x + m.carArea.w;
+    auto shifted = [dx, areaL, areaR](const Rect& r) { return slideWithin(r, dx, areaL, areaR); };
 
-    const Game* sides[2] = {left, right};
-    const Rect sideRects[2] = {shifted(m.carLeft), shifted(m.carRight)};
-    const Region sideRegions[2] = {Region::CarouselLeft, Region::CarouselRight};
-    for (int i = 0; i < 2; ++i) {
-        if (!sides[i] || sideRects[i].empty()) continue;
-        Rect r = drawCover(covers, *sides[i], sideRects[i], false);
-        bool hovered = hitIs(hover, sideRegions[i]) && s.overlay == Overlay::None;
-        gfx::rect(r.x, r.y, r.w, r.h, hovered ? 0x00000040 : 0x00000080);  // abgedunkelt
+    for (int stage = 1; stage >= 0; --stage) {  // außen nach innen, Mitte zuletzt
+        const Rect frames[2] = {m.fan.left[stage], m.fan.right[stage]};
+        const Region regions[2] = {Region::CarouselLeft, Region::CarouselRight};
+        for (int side = 0; side < 2; ++side) {
+            const Game* g = fanGame(s, lib, side == 0 ? -(stage + 1) : stage + 1);
+            if (!g || frames[side].empty()) continue;
+            Rect r = drawCover(covers, *g, shifted(frames[side]), false);
+            bool hovered = main && hitIs(hover, regions[side], stage + 1);
+            gfx::rect(r.x, r.y, r.w, r.h, hovered ? kSideDimHover[stage] : kSideDim[stage]);
+        }
     }
     if (center) {
         Rect r = shifted(m.carCenter);
-        bool focused = s.focus == Focus::Carousel && s.overlay == Overlay::None;
+        bool focused = s.focus == Focus::Carousel && main;
         if (focused)
             gfx::rect(r.x - 3, r.y - 3, r.w + 6, r.h + 6, kAccent);
-        else if (hitIs(hover, Region::CarouselCenter) && s.overlay == Overlay::None)
+        else if (hitIs(hover, Region::CarouselCenter) && main)
             gfx::rect(r.x - 2, r.y - 2, r.w + 4, r.h + 4, 0xE8E8E866);
         drawCover(covers, *center, r, false, 1.0f - 0.4f * std::fabs(slide));
 
-        std::string t = gfx::fitText(kSizeTitle, m.leftW, center->title);
-        gfx::text(std::round(m.leftX + (m.leftW - gfx::textWidth(kSizeTitle, t)) / 2), m.titleY, kSizeTitle, kText,
-                  t);
+        std::string t = gfx::fitText(kSizeTitle, m.carArea.w, center->title);
+        gfx::text(std::round(m.carArea.x + (m.carArea.w - gfx::textWidth(kSizeTitle, t)) / 2), m.titleY,
+                  kSizeTitle, kText, t);
         const char* sys = systemName(center->system);
-        gfx::text(std::round(m.leftX + (m.leftW - gfx::textWidth(kSizeSmall, sys)) / 2), m.systemY, kSizeSmall,
-                  kMuted, sys);
+        gfx::text(std::round(m.carArea.x + (m.carArea.w - gfx::textWidth(kSizeSmall, sys)) / 2), m.systemY,
+                  kSizeSmall, kMuted, sys);
+    } else {
+        const char* empty = "Keine Spiele";
+        gfx::text(std::round(m.carArea.x + (m.carArea.w - gfx::textWidth(kSizeList, empty)) / 2),
+                  textTop(m.carArea.y + m.carArea.h / 2, kSizeList), kSizeList, kMuted, empty);
     }
 
-    // Tastenhinweise (Entscheidung des Leads: nur diese drei, klein und gedämpft)
+    // Tastenhinweise (Entscheidung des Leads: nur diese drei, klein und gedämpft), zentriert
+    // unter der Fächerfläche.
     {
         const char* hints[3] = {"+ Systeme", "\xE2\x80\x93 Suche", "1/2 Seite"};
         float widths[3], total = 0;
         for (int i = 0; i < 3; ++i) total += widths[i] = gfx::textWidth(kSizeSmall, hints[i]);
-        float gap = std::clamp((m.leftW - total) / 2, 8.0f, 24.0f);
-        float x = m.leftX;
+        float gap = std::clamp((m.carArea.w - total) / 2, 8.0f, 24.0f);
+        float x = m.carArea.x + std::max(0.0f, (m.carArea.w - total - 2 * gap) / 2);
         for (int i = 0; i < 3; ++i) {
             gfx::text(std::round(x), m.hintsY, kSizeSmall, kMuted, hints[i]);
             x += widths[i] + gap;
         }
     }
 
-    // Trennlinie
-    gfx::rect(m.splitX, kListTop, 1, Library::kPageSize * kRowH, kBorder);
+    if (m.listPanel.x >= W()) return;  // Liste ganz draußen
+
+    // Einblendung: Fläche in kPanel mit 1 px Rand links, damit sie als Ebene erkennbar ist.
+    gfx::rect(m.listPanel.x, m.listPanel.y, m.listPanel.w, m.listPanel.h, kPanel);
+    gfx::rect(m.listPanel.x, m.listPanel.y, 1, m.listPanel.h, kBorder);
 
     // Buchstabenspalte
     const auto& vis = lib.visible();
@@ -498,8 +535,10 @@ void drawMain(const UiState& s, const Library& lib, const std::vector<const Game
             textIn(r, kSizeSmall, withAlpha(kMuted, 0.35f), label, true);
             continue;
         }
-        bool focused = s.focus == Focus::Letters && s.letterIndex == li && s.overlay == Overlay::None;
-        uint32_t fill = focused ? kAccent : (m.letterChars[i] == currentLetter ? kChipHover : kRowSel);
+        bool focused = s.focus == Focus::Letters && s.letterIndex == li && main;
+        bool hovered = main && s.listOpen && hitIs(hover, Region::Letter, li);
+        uint32_t fill = focused ? kAccentFill
+                                : (m.letterChars[i] == currentLetter || hovered ? kChipHover : kRowSel);
         roundRectR(r, 4, fill);
         textIn(r, kSizeSmall, focused ? kWhite : kText, label, true);
     }
@@ -514,10 +553,12 @@ void drawMain(const UiState& s, const Library& lib, const std::vector<const Game
         for (size_t i = 0; i < games.size() && i < static_cast<size_t>(Library::kPageSize); ++i) {
             const Rect& r = m.rows[i];
             if (static_cast<int>(i) == sel) {
-                if (s.focus == Focus::List && s.overlay == Overlay::None)
+                if (s.focus == Focus::List && main)
                     focusRow(r);
                 else
                     roundRectR(r, 6, kRowSel);
+            } else if (main && s.listOpen && hitIs(hover, Region::ListRow, static_cast<int>(i))) {
+                roundRectR(r, 6, kRowSel);  // überfahren, aber nicht gewählt
             }
             drawCover(covers, *games[i], Rect{r.x + 6, r.y + (kRowH - kMiniH) / 2, kMiniW, kMiniH}, true);
             float tx = r.x + 6 + kMiniW + 10;
@@ -531,7 +572,7 @@ void drawNoUsb(const Hit& hover, const std::string& reason) {
     NoUsbLayout l = noUsbLayout();
     const char* title = "USB-Platte nicht gefunden";
     gfx::text(std::round((W() - gfx::textWidth(kSizeTitle, title)) / 2), l.titleY, kSizeTitle, kText, title);
-    roundRectR(l.button, 10, hitIs(hover, Region::Retry) ? 0x5B95F7FF : kAccent);
+    roundRectR(l.button, 10, hitIs(hover, Region::Retry) ? kAccentFillHover : kAccentFill);
     textIn(l.button, kSizeList, kWhite, "Erneut suchen", true);
     const char* hint = "A: Erneut suchen";
     gfx::text(std::round((W() - gfx::textWidth(kSizeSmall, hint)) / 2), l.hintY, kSizeSmall, kMuted, hint);
@@ -558,7 +599,7 @@ void drawOverlay(Overlay o, const UiState& s, const Library& lib, float a) {
                 textIn(tr, kSizeList, withAlpha(kText, a), systemLabel(sys), false);
                 bool on = s.systems.get(sys);
                 Rect sw{r.x + r.w - 12 - 42, r.y + (r.h - 22) / 2, 42, 22};
-                roundRectR(sw, 11, withAlpha(on ? kAccent : 0x3A4150FF, a));
+                roundRectR(sw, 11, withAlpha(on ? kAccentFill : 0x3A4150FF, a));
                 float kx = on ? sw.x + sw.w - 3 - 16 : sw.x + 3;
                 gfx::roundRect(kx, sw.y + 3, 16, 16, 8, withAlpha(kWhite, a));
             }
@@ -581,7 +622,7 @@ void drawOverlay(Overlay o, const UiState& s, const Library& lib, float a) {
             const auto& keys = keyboardKeys();
             for (size_t i = 0; i < l.keys.size() && i < keys.size(); ++i) {
                 bool focused = !s.searchInResults && s.keyboardIndex == static_cast<int>(i);
-                roundRectR(l.keys[i], 6, withAlpha(focused ? kAccent : kChip, a));
+                roundRectR(l.keys[i], 6, withAlpha(focused ? kAccentFill : kChip, a));
                 std::string label = keys[i];
                 if (label.size() == 1) label[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(label[0])));
                 int size = label.size() == 1 ? kSizeList : kSizeSmall;

@@ -23,5 +23,5 @@ void pushRecent(std::vector<RecentEntry>& entries, const RecentEntry& e);
 // Treffer ueber dir+file, Eintraege ohne Treffer entfallen, Reihenfolge bleibt.
 std::vector<const Game*> resolveRecent(const std::vector<RecentEntry>& entries,
                                        const std::vector<Game>& all);
-// Fuer das Karussell: resolveRecent ueber library.games(), nur Spiele aktivierter Systeme.
+// Fuer die Startposition des Fächers: resolveRecent ueber library.games(), nur Spiele aktivierter Systeme.
 std::vector<const Game*> recentForLibrary(const std::vector<RecentEntry>& entries, const Library& library);

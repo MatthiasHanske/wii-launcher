@@ -1,5 +1,5 @@
 #pragma once
-// Bildschirme des Launchers (Spec 4.1/4.6, Layout C mit Mini-Covern): Layout, Zeichnen und
+// Bildschirme des Launchers (Spec 4.1/4.6 und Cover-Fächer 2026-11-01): Layout, Zeichnen und
 // Hit-Test. Zeichnen und Hit-Test rechnen mit denselben Layout-Strukturen, damit Klickflächen
 // und Bild übereinstimmen. Alle Koordinaten logisch (gfx::width() x 480), 32 px Sicherheitsrand.
 //
@@ -27,7 +27,9 @@ using Hit = std::optional<std::pair<int, int>>;
 constexpr uint32_t kBg = 0x0F1218FF;
 constexpr uint32_t kText = 0xE8E8E8FF;
 constexpr uint32_t kMuted = 0x9AA3B5FF;
-constexpr uint32_t kAccent = 0x3B82F6FF;
+constexpr uint32_t kAccent = 0x3B82F6FF;      // Ringe, Rahmen, Fokusrahmen der Listenzeile
+constexpr uint32_t kAccentFill = 0x2563EBFF;  // gefüllte Flächen mit weißem Text (5,2:1)
+constexpr uint32_t kAccentFillHover = 0x1D4ED8FF;
 constexpr uint32_t kPanel = 0x171C26FF;
 constexpr uint32_t kBorder = 0x2A3140FF;
 constexpr uint32_t kChip = 0x222A38FF;
@@ -81,6 +83,7 @@ private:
 struct TopBarLayout {
     std::vector<Rect> tabs;            // [0] = Alle, [i] = library.tabs()[i-1]
     std::vector<std::string> labels;   // ggf. gekürzt
+    Rect listToggle;                   // Pille "Liste" links neben der Suche
     Rect search;
     bool searchCompact = false;        // nur Lupe, wenn die Tabs sonst nicht passen
 };
@@ -88,16 +91,15 @@ struct TopBarLayout {
 constexpr int kLetterCells = 27;  // '#', A..Z
 constexpr int kLetterRows = 14;   // zwei Spalten, spaltenweise
 
+// listT: 0 = Liste zu (Fächer über die volle Breite), 1 = Liste offen (Fächer in der linken
+// Spalte, Liste rechts der Trennlinie); dazwischen der Übergang.
 struct MainLayout {
     TopBarLayout bar;
-    float leftX = 0, leftW = 0, splitX = 0;
-    float labelY = 0;
-    Rect carArea;                               // Vorschaufläche: Spaltenbreite x Vorschauhöhe
+    Rect carArea;                               // Fächerfläche
     Rect carCenter;                             // Mittelcover, per fitRect in carArea eingepasst
-    Rect carLeft, carRight;                     // Rahmen der Seitencover (Cover darin eingepasst),
-                                                // leer, wenn die Mitte sie verdrängt
-    Rect hitLeft, hitRight;                     // Klickflächen der Seitencover (volle Höhe)
+    FanGeometry fan;                            // Seitencover und Klickflächen; Stufen ohne Spiel leer
     float titleY = 0, systemY = 0, hintsY = 0;
+    Rect listPanel;                             // Einblendung ab Trennlinie bis rechter Rand
     float listX = 0, listW = 0;
     Rect rows[Library::kPageSize];
     int rowCount = 0;                           // Zeilen mit Spiel auf der aktuellen Seite
@@ -108,7 +110,8 @@ struct MainLayout {
 
 // centerImgW/H: echte Bildgröße des Mittelcovers (Texture::w/h); 0 = kein Cover geladen,
 // dann hat die Mitte das Standardformat der Platzhalter-Kachel.
-MainLayout mainLayout(const UiState& s, const Library& lib, float centerImgW = 0, float centerImgH = 0);
+MainLayout mainLayout(const UiState& s, const Library& lib, float listT, float centerImgW = 0,
+                      float centerImgH = 0);
 
 struct SystemsLayout {
     Rect panel;
@@ -141,19 +144,19 @@ NoUsbLayout noUsbLayout();
 // --- Hit-Test ------------------------------------------------------------------------------
 
 // Nur die oberste Ebene: offenes Overlay -> dessen Regionen, außerhalb des Panels Region::None,
-// im Panel ohne Bedienelement nullopt. Hauptbild: Region::None, wenn nichts getroffen.
-// recent wie für carouselGame(): CarouselLeft/Right gibt es nur, wenn dort ein Spiel liegt.
+// im Panel ohne Bedienelement nullopt. Hauptbild: Region::None, wenn nichts getroffen (schließt
+// eine offene Liste), in der Listenfläche ohne Bedienelement nullopt. Gerechnet wird immer mit
+// dem Zielzustand der Liste (listOpen), nicht mit der laufenden Einblendung.
+// CarouselLeft/Right (Index = Abstand 1 oder 2) gibt es nur, wenn dort ein Spiel liegt.
 // covers: für die Breite des Mittelcovers (nur bereits geladene, siehe Covers::peek); ohne
 // covers gilt das Standardformat.
-Hit hitTest(float x, float y, const UiState& s, const Library& lib, const std::vector<const Game*>& recent,
-            const Covers* covers = nullptr);
+Hit hitTest(float x, float y, const UiState& s, const Library& lib, const Covers* covers = nullptr);
 
 // --- Zeichnen ------------------------------------------------------------------------------
 
 // Hauptbild. hover = aktueller Zeigertreffer (Hover-Hervorhebung), slide in [-1, 1]:
-// Gleitversatz des Karussells (0 = in Ruhe).
-void drawMain(const UiState& s, const Library& lib, const std::vector<const Game*>& recent,
-              Covers& covers, const Hit& hover, float slide);
+// Gleitversatz des Fächers (0 = in Ruhe), listT in [0, 1]: Einblendung der Liste.
+void drawMain(const UiState& s, const Library& lib, Covers& covers, const Hit& hover, float slide, float listT);
 // "USB-Platte nicht gefunden" mit Knopf "Erneut suchen".
 void drawNoUsb(const Hit& hover, const std::string& reason);
 // Overlay o mit Deckkraft alpha (0..1, Ein-/Ausblenden), inklusive Abdunklung.
