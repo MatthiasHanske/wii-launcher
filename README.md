@@ -6,7 +6,7 @@ Bauen braucht devkitPro (devkitPPC, GRRLIB, libfat; siehe `docs/toolchain.md`). 
 
 ## Bedienung
 
-Das Hauptbild zeigt oben die Leiste (Tabs je System, Pille „Liste", Suche) und darunter einen Fächer aus Covern über alle Spiele des aktiven Tabs, alphabetisch. Der Launcher startet im Tab „Wii“, „Alle“ liegt links davon. Beim Start und nach jedem Spielstart steht der Fächer auf dem zuletzt gespielten Spiel.
+Das Hauptbild zeigt oben die Leiste (Tabs je System, Pille „Liste", Suche) und darunter einen Fächer aus Covern über alle Spiele des aktiven Tabs, alphabetisch. Der Launcher startet im Tab „Wii", „Alle" liegt links davon. Beim Start und nach jedem Spielstart steht der Fächer auf dem zuletzt gespielten Spiel.
 
 - Fächer: Steuerkreuz links/rechts blättert um ein Spiel (gehalten immer schneller), 1/2 springen zehn Spiele zurück/vor, A startet das Mittelcover. Ein Klick auf ein Seitencover springt dorthin, ein Klick auf die Mitte startet.
 - Liste: Steuerkreuz runter oder Klick auf „Liste" blendet sie von rechts ein (A-Z-Spalte und zehn Zeilen). Das Mittelcover zeigt immer das gewählte Spiel. In der Liste blättern 1/2 seitenweise, A startet; ein Klick wählt eine Zeile, ein zweiter Klick startet sie.
