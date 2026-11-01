@@ -42,6 +42,7 @@ enum class Action { Up, Down, Left, Right, A, B, Plus, Minus, One, Two, Home, Po
 //   Jede Auswahl in der Liste setzt auch carouselIndex (Mittelcover = gewaehltes Spiel).
 // - A-Z: hoch/runter Buchstabe, A springt in die Liste, rechts -> Liste,
 //   links oder B -> Liste schliessen, Fokus Fächer.
+// Zeiger: Klick auf einen Tab waehlt ihn und setzt den Fokus in den Fächer.
 
 // Regionstypen fuer den Hit-Test des Renderers: pointerHit = {int(Region), Index}.
 enum class Region {

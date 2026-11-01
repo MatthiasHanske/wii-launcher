@@ -522,6 +522,19 @@ TEST(ui_empty_library_is_safe) {
     CHECK(searchResults(s, lib).empty());
 }
 
+TEST(ui_tab_click_focuses_carousel) {
+    Library lib(uiFixture());
+    UiState s;
+    s.focus = Focus::Tabs;
+    click(s, lib, Region::Tab, 1);
+    CHECK_EQ(s.tabIndex, 1);
+    CHECK(s.focus == Focus::Carousel);
+    CHECK_EQ(s.carouselIndex, 0);
+    press(s, lib, Action::Right);  // Steuerkreuz blaettert jetzt Cover, nicht Tabs
+    CHECK_EQ(s.tabIndex, 1);
+    CHECK_EQ(s.carouselIndex, 1);
+}
+
 TEST(ui_out_of_range_pointer_ignored) {
     Library lib(uiFixture());
     UiState s;

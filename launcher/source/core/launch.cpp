@@ -208,6 +208,8 @@ bool launchReadsGameDir(const Game& g) { return g.system == System::Adventure &&
 
 LaunchPlan makeLaunchPlan(const Game& g, IFileSystem& fs) {
     LaunchPlan p;
+    // Alle Pläne außer Wii/GameCube (eigener Plan aus usbLoaderPlan) warten auf die Platte.
+    p.waitForUsb = true;
     switch (g.system) {
         case System::Wii:
         case System::GameCube:

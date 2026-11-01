@@ -15,6 +15,10 @@ struct LaunchPlan {
     std::vector<std::pair<std::string, std::string>> filesToWrite;  // Pfad, Inhalt
     // false: Wii/GameCube ohne bekannte Spiel-ID, USB Loader GX oeffnet nur seine Liste.
     bool quickBoot = true;
+    // true: der Launcher wartet nach dem IOS-Reload, bis die USB-Platte lesbar ist, bevor er
+    // springt. Für Emulatoren und ScummVM/DOSBox, die USB nur einmal beim Start einhängen.
+    // false für Wii/GameCube: USB Loader GX wartet selbst auf die Platte.
+    bool waitForUsb = false;
 };
 
 LaunchPlan makeLaunchPlan(const Game& game, IFileSystem& fs);

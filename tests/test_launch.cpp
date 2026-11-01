@@ -42,6 +42,7 @@ TEST(launch_wii_quickboot) {
     CHECK(p.args == Args{"RMCP01"});
     CHECK(p.quickBoot);
     CHECK(p.filesToWrite.empty());
+    CHECK(!p.waitForUsb);  // USB Loader GX wartet selbst auf die Platte
 }
 
 TEST(launch_gamecube_quickboot) {
@@ -132,6 +133,22 @@ TEST(launch_scummvm) {
     CHECK(p.args == (Args{"--auto-detect", "--path=usb:/scummvm/Monkey Island", "--extrapath=sd:/apps/scummvm",
                           "--themepath=sd:/apps/scummvm"}));
     CHECK(p.filesToWrite.empty());
+    CHECK(p.waitForUsb);  // ScummVM hängt USB nur einmal ein und prüft --path sofort
+}
+
+// --- Warten auf die USB-Platte nach dem IOS-Reload ---
+
+TEST(launch_wait_for_usb_except_usb_loader) {
+    FakeFs fs;
+    CHECK(!makeLaunchPlan(mkGame(System::Wii, "usb:/wbfs/Mario Kart [RMCP01]", "RMCP01.wbfs", "RMCP01"), fs).waitForUsb);
+    CHECK(!makeLaunchPlan(mkGame(System::Wii, "usb:/wbfs/Unbekannt", "x.wbfs", ""), fs).waitForUsb);
+    CHECK(!makeLaunchPlan(mkGame(System::GameCube, "usb:/games/Zelda [GZLP01]", "", "GZLP01"), fs).waitForUsb);
+    CHECK(makeLaunchPlan(mkGame(System::SNES, "usb:/snes9xgx/roms", "a.sfc"), fs).waitForUsb);
+    CHECK(makeLaunchPlan(mkGame(System::NES, "usb:/fceugx/roms", "a.nes"), fs).waitForUsb);
+    CHECK(makeLaunchPlan(mkGame(System::Sega, "usb:/genplus/roms/md", "a.gen", "", "md"), fs).waitForUsb);
+    CHECK(makeLaunchPlan(mkGame(System::N64, "usb:/not64/roms", "a.z64"), fs).waitForUsb);
+    CHECK(makeLaunchPlan(mkGame(System::Adventure, "usb:/scummvm/Monkey Island"), fs).waitForUsb);
+    CHECK(makeLaunchPlan(mkGame(System::Adventure, "usb:/dosbox/SimCity 2000"), fs).waitForUsb);
 }
 
 // --- Lesezugriff auf den Spielordner (USB nach dem Scan ausgehängt) ---

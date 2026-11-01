@@ -122,6 +122,30 @@ bool WiiFs::mountUsb(int retries, int delayMs) {
     return usbMounted_;
 }
 
+bool WiiFs::waitUsbReady(int maxMs, int& waitedMs) {
+    constexpr int kStepMs = 100;
+    waitedMs = 0;
+    bool ready = false;
+    uint8_t* sector = static_cast<uint8_t*>(memalign(32, 4096));  // reicht auch für 4K-Sektoren
+    if (sector) {
+        for (;;) {
+            if (__io_usbstorage.startup() && __io_usbstorage.isInserted() &&
+                __io_usbstorage.readSectors(0, 1, sector)) {
+                ready = true;
+                break;
+            }
+            if (waitedMs >= maxMs) break;
+            usleep(kStepMs * 1000);
+            waitedMs += kStepMs;
+        }
+        free(sector);
+    }
+    // Gerät schließen, auch wenn startup fehlschlug (ohne offenes Gerät ein No-op).
+    __io_usbstorage.shutdown();
+    usbStarted_ = false;
+    return ready;
+}
+
 void WiiFs::unmountUsb() {
     // fatUnmount schreibt den Cache zurück, schließt das Gerät aber nicht. shutdown schließt
     // es (USBStorage_Close), ist ohne offenes Gerät ein No-op; die Flags verhindern trotzdem
