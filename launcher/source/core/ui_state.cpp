@@ -421,7 +421,7 @@ Command applyClick(UiState& s, Library& lib, Region r, int idx) {
         case Region::Tab:
             if (idx >= 0 && idx <= static_cast<int>(lib.tabs().size())) {
                 selectTab(s, lib, idx);
-                s.focus = Focus::Tabs;
+                s.focus = Focus::Carousel;  // weiter mit dem Steuerkreuz im Fächer, nicht in der Leiste
             }
             break;
         case Region::CarouselLeft:
