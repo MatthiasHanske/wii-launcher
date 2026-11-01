@@ -870,3 +870,29 @@ TEST(emptyLibraryOpenCloseSafe) {
     CHECK_EQ(s.carouselIndex, 0);
     CHECK(carouselGame(s, lib) == nullptr);
 }
+
+TEST(ui_select_system_tab) {
+    Library lib(uiFixture());
+    SystemSet sys = SystemSet::defaults();
+    sys.at(System::SNES) = true;
+    lib.setEnabled(sys);
+    UiState s;
+    selectSystemTab(s, lib, System::Wii);
+    CHECK_EQ(s.tabIndex, 1);
+    CHECK_EQ(lib.visible().size(), (size_t)12);
+    for (auto g : lib.visible()) CHECK(g->system == System::Wii);
+    selectSystemTab(s, lib, System::SNES);
+    CHECK_EQ(s.tabIndex, 4);
+    CHECK_EQ(lib.visible().size(), (size_t)3);
+}
+
+TEST(ui_select_system_tab_disabled_noop) {
+    Library lib(uiFixture());
+    SystemSet sys = SystemSet::defaults();
+    sys.at(System::Wii) = false;
+    lib.setEnabled(sys);
+    UiState s;
+    selectSystemTab(s, lib, System::Wii);
+    CHECK_EQ(s.tabIndex, 0);
+    CHECK_EQ(lib.visible().size(), (size_t)10);
+}

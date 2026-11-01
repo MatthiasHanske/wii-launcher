@@ -454,6 +454,15 @@ Command applyClick(UiState& s, Library& lib, Region r, int idx) {
 
 }  // namespace
 
+void selectSystemTab(UiState& s, Library& lib, System sys) {
+    std::vector<System> tabs = lib.tabs();
+    for (size_t i = 0; i < tabs.size(); ++i)
+        if (tabs[i] == sys) {
+            selectTab(s, lib, static_cast<int>(i) + 1);
+            return;
+        }
+}
+
 const std::vector<std::string>& keyboardKeys() {
     static const std::vector<std::string> keys = {
         "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
