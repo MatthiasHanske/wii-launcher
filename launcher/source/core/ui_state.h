@@ -85,6 +85,10 @@ Command apply(UiState& s, Library& library, Action a, std::optional<std::pair<in
 // Im Hauptbild (Overlay::None) wirkt Hover nicht auf den Zustand.
 void pointerHover(UiState& s, const Library& library, std::optional<std::pair<int, int>> pointerHit);
 
+// Tab des Systems waehlen (wie ein Tabwechsel). Ist das System nicht aktiviert (nicht in
+// library.tabs()), passiert nichts und der Tab bleibt unveraendert.
+void selectSystemTab(UiState& s, Library& library, System sys);
+
 // visible()[carouselIndex], sonst nullptr.
 const Game* carouselGame(const UiState& s, const Library& library);
 

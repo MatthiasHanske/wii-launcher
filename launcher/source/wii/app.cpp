@@ -301,19 +301,28 @@ void App::rebuildLibrary(std::vector<Game> games) {
     state_.letterIndex = 0;
     state_.carouselIndex = 0;
     refreshRecent();
+    // Start im Tab "Wii"; ist Wii deaktiviert, bleibt "Alle".
+    selectSystemTab(state_, *lib_, System::Wii);
     startPosition();
 }
 
 void App::refreshRecent() { recent_ = recentForLibrary(recentEntries_, *lib_); }
 
-// Fächer auf das zuletzt gespielte Spiel (recent_[0]) in visible(), sonst auf das erste.
+// Fächer auf das zuletzt gespielte Spiel (erster Eintrag aus recent_, der in visible() vorkommt),
+// sonst auf das erste.
 // Liste und Overlay zu.
 void App::startPosition() {
     const auto& vis = lib_->visible();
     int index = 0;
-    if (!recent_.empty())
-        for (size_t i = 0; i < vis.size(); ++i)
-            if (vis[i] == recent_[0]) index = static_cast<int>(i);
+    for (const Game* r : recent_) {
+        bool found = false;
+        for (size_t i = 0; i < vis.size() && !found; ++i)
+            if (vis[i] == r) {
+                index = static_cast<int>(i);
+                found = true;
+            }
+        if (found) break;
+    }
     state_.carouselIndex = index;
     state_.listIndex = index;
     state_.listOpen = false;
