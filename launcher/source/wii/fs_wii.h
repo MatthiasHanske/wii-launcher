@@ -9,6 +9,11 @@ public:
     // USB-Festplatte als "usb:" einhängen. Erkennt MBR und GPT; versucht es retries-mal
     // mit delayMs Pause (Platten brauchen nach dem Start oft einige Sekunden).
     bool mountUsb(int retries, int delayMs);
+    // Wartet höchstens maxMs, bis die USB-Platte lesbar ist (startup, isInserted, Sektor 0),
+    // mit 100 ms Pause zwischen den Versuchen. Hängt nichts ein und schließt das Gerät am Ende
+    // immer (kein offenes Handle für das gestartete Programm). waitedMs: Wartezeit bis zum
+    // Erfolg bzw. bis zum Abbruch. Für bootDol nach dem IOS-Reload, wenn fat ausgehängt ist.
+    bool waitUsbReady(int maxMs, int& waitedMs);
     // Wie der letzte mountUsb-Aufruf ausging (Anzeige- und Logtext, UTF-8), z. B.
     // "eingehängt: MBR/GPT, fatMount auf LBA 2048 (…)".
     const std::string& lastMountInfo() const { return mountInfo_; }

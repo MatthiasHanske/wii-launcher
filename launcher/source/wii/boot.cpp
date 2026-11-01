@@ -389,11 +389,31 @@ bool bootDol(const LaunchPlan& plan, WiiFs& fs, std::string& reason) {
 
     // Ergebnis ins Log: SD unter dem neuen IOS kurz einhängen (der HBC liest nach dem
     // IOS-Reload ebenso von der SD), schreiben, wieder aushängen. Klappt das nicht, bleibt
-    // "vor IOS-Reload" die letzte Zeile. Danach nur noch Speicher, Cache, GX und
+    // "vor IOS-Reload" die letzte Zeile. Nach dem USB-Warten nur noch Speicher, Cache, GX und
     // SYS_ResetSystem (ES/STM, von IOS_ReloadIOS neu geöffnet).
-    if (fs.mountSd()) {
+    const bool sdLog = fs.mountSd();
+    if (sdLog) {
         diag::logReopen();
         if (reload) diag::logf("bootDol: IOS_ReloadIOS(58) = %d", static_cast<int>(reloadResult));
+    }
+
+    // Nach dem Reload enumeriert IOS die USB-Platte neu (ein bis drei Sekunden). ScummVM und
+    // DOSBox hängen USB nur einmal beim Start ein und brechen sonst ab ("Non-existent path",
+    // TV-Test 2026-11-01). Also hier warten, bis die Platte lesbar ist; das Bild ist schwarz.
+    // Auch ohne Reload, schadet nicht.
+    if (plan.waitForUsb) {
+        constexpr int kUsbWaitMs = 10000;
+        int waited = 0;
+        const bool usbReady = fs.waitUsbReady(kUsbWaitMs, waited);
+        if (sdLog) {
+            if (usbReady)
+                diag::logf("bootDol: USB bereit nach %d ms", waited);
+            else
+                diag::logf("bootDol: USB nach %d ms nicht bereit, Sprung trotzdem", kUsbWaitMs);
+        }
+    }
+
+    if (sdLog) {
         diag::logf("bootDol: vor Sprung: %s", iosStateText().c_str());
         diag::logf("bootDol: Sprung");
         diag::logClose();
