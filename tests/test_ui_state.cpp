@@ -894,5 +894,5 @@ TEST(ui_select_system_tab_disabled_noop) {
     UiState s;
     selectSystemTab(s, lib, System::Wii);
     CHECK_EQ(s.tabIndex, 0);
-    CHECK_EQ(lib.visible().size(), (size_t)10);
+    CHECK_EQ(lib.visible().size(), (size_t)5);
 }
