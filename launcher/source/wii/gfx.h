@@ -51,8 +51,10 @@ void ring(float cx, float cy, float radius, float thickness, uint32_t rgba);
 // y ist die Oberkante der Zeile, die Grundlinie liegt bei y + size.
 // Jeder (utf8, size) wird einmal weiß in eine Textur gerendert (FreeType direkt) und beim
 // Zeichnen mit rgba eingefärbt; Cache 2 MB, LRU. Zeilen über 1024 px werden abgeschnitten.
+// Gerendert wird in physischen EFB-Pixeln (bei 16:9 horizontal gestaucht) und 1:1 gezeichnet.
 void text(float x, float y, int size, uint32_t rgba, const std::string& utf8);
-// Summe der gecachten Vorschübe je (Codepoint, Größe); ohne Kerning, wie text().
+// Summe der gecachten Vorschübe je (Codepoint, Größe) in logischen Pixeln; ohne Kerning,
+// wie text().
 float textWidth(int size, const std::string& utf8);
 // ellipsize mit Memo (je Text, Breite, Größe); nach dem ersten Aufruf ohne FreeType-Arbeit.
 std::string fitText(int size, float maxWidth, const std::string& utf8);

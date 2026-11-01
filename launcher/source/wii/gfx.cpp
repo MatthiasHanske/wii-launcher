@@ -19,10 +19,17 @@ namespace {
 
 constexpr int kHeight = 480;
 int gWidth = 640;
+// Physische EFB-Pixel je logischem Pixel in x: 640 / gWidth (1 bei 4:3, 0,7494 bei 16:9).
+float gScaleX = 1.0f;
 GRRLIB_ttfFont* gFont = nullptr;
 
 // Logische Fläche gWidth x 480 auf den ganzen EFB (rmode->fbWidth x efbHeight).
 // Ersetzt die Pixel-Projektion aus GRRLIB_2dMode; Viewport bleibt der von GRRLIB.
+// Sonderfall Text: bei 16:9 würde eine Textur in logischen Pixeln auf 0,7494 gestaucht und
+// bilinear verschmiert. Darum rendert FreeType die Glyphen schon horizontal gestaucht in
+// physischen Pixeln (setFaceSize), text() legt die Textur 1:1 auf EFB-Pixel (scaleX =
+// 1 / gScaleX, x auf physische Pixel gerundet). Vorschübe und Texturbreiten sind physisch,
+// textWidth() rechnet für die Layouts zurück in logische Pixel.
 void loadProjection() {
     Mtx44 m;
     guOrtho(m, 0, kHeight, 0, gWidth, 0, 1000.0f);
@@ -33,14 +40,25 @@ void loadProjection() {
 
 FT_Face face() { return gFont ? static_cast<FT_Face>(gFont->face) : nullptr; }
 
+// Gemeinsamer Ort für die Schriftgröße von advance() und renderText(), damit Vorschub und
+// Bitmap dieselbe Stauchung haben. Bei 16:9 ist die Breite size * gScaleX als 26.6-Wert
+// (gebrochen, Inter rundet die ppem nicht): FreeType hintet und rundet die Vorschübe dann
+// direkt im physischen Raster. FT_Set_Transform wäre die Alternative, hintet aber in voller
+// Breite und staucht erst danach; der schon gerundete Vorschub wird dann ein zweites Mal
+// gerundet, die Wortabstände werden sichtbar ungleich und die Zeile rund 4 % breiter.
 int gFaceSize = 0;
 void setFaceSize(int size) {
     if (gFaceSize == size) return;
-    FT_Set_Pixel_Sizes(face(), 0, static_cast<FT_UInt>(size));
+    if (gScaleX == 1.0f) {
+        FT_Set_Pixel_Sizes(face(), 0, static_cast<FT_UInt>(size));
+    } else {
+        FT_F26Dot6 w = static_cast<FT_F26Dot6>(std::lround(size * gScaleX * 64));
+        FT_Set_Char_Size(face(), w, static_cast<FT_F26Dot6>(size) * 64, 72, 72);
+    }
     gFaceSize = size;
 }
 
-// Vorschub in Pixeln je (Codepoint, Größe). Inter hat kein von GRRLIB/FreeType genutztes
+// Vorschub in physischen Pixeln je (Codepoint, Größe). Inter hat kein von GRRLIB/FreeType genutztes
 // kern-Table, die Summe der Vorschübe ist also die exakte Zeilenbreite.
 std::unordered_map<uint64_t, int> gAdvances;
 
@@ -57,6 +75,7 @@ int advance(uint32_t cp, int size) {
     return adv;
 }
 
+// Zeilenbreite in physischen Pixeln.
 int widthOf(const std::vector<uint32_t>& cps, int size) {
     int w = 0;
     for (uint32_t cp : cps) w += advance(cp, size);
@@ -103,7 +122,8 @@ void clearTexts() {
     while (gTextLru.size() > 0) releaseText(gTextLru.evict());
 }
 
-// Rendert die Zeile weiß (Alpha = Glyphendeckung) in eine RGBA8-Textur.
+// Rendert die Zeile weiß (Alpha = Glyphendeckung) in eine RGBA8-Textur, Breite in
+// physischen Pixeln, Höhe wie logisch (y wird nicht skaliert).
 bool renderText(const std::vector<uint32_t>& cps, int size, TextTex& out) {
     FT_Face f = face();
     setFaceSize(size);
@@ -159,6 +179,7 @@ bool renderText(const std::vector<uint32_t>& cps, int size, TextTex& out) {
 bool init() {
     if (GRRLIB_Init() != 0) return false;
     gWidth = CONF_GetAspectRatio() == CONF_ASPECT_16_9 ? 854 : 640;
+    gScaleX = gWidth == 640 ? 1.0f : 640.0f / static_cast<float>(gWidth);
     loadProjection();
     gFont = GRRLIB_LoadTTF(font_ttf, static_cast<s32>(font_ttf_size));
     gFaceSize = 0;
@@ -267,15 +288,18 @@ void text(float x, float y, int size, uint32_t rgba, const std::string& utf8) {
         gTextLru.touch(key);
     }
     it->second.frame = gFrame;
-    // ganze logische Pixel, sonst verschmiert die bilineare Filterung die Glyphen
-    float dx = std::round(x) - kTextPadX;
+    // Ganze physische Pixel und ein Texel je EFB-Pixel, sonst verschmiert die bilineare
+    // Filterung die Glyphen. GRRLIB_DrawImg skaliert um die linke obere Ecke (Handle 0, 0).
+    float px = std::round(x * gScaleX);
+    float dx = (px - kTextPadX) / gScaleX;
     float dy = std::round(y) + size - it->second.ascent;
-    GRRLIB_DrawImg(dx, dy, it->second.img, 0, 1, 1, rgba);
+    GRRLIB_DrawImg(dx, dy, it->second.img, 0, 1.0f / gScaleX, 1, rgba);
 }
 
 float textWidth(int size, const std::string& utf8) {
     if (!gFont || utf8.empty() || size <= 0) return 0;
-    return static_cast<float>(widthOf(utf8Decode(utf8), size));
+    // logische Pixel für die Layouts
+    return static_cast<float>(widthOf(utf8Decode(utf8), size)) / gScaleX;
 }
 
 std::string fitText(int size, float maxWidth, const std::string& utf8) {
