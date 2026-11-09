@@ -16,10 +16,10 @@
 namespace {
 
 constexpr size_t kTextureBudget = 24 * 1024 * 1024;
-// RMCP01 laut Plan; tools/dolphin-sd enthält mangels RMCP01 im Backup RHAP01/RSPP01/RFNP01.
+// Erstes vorhandenes Cover; tools/dolphin-sd enthält eigene Demo-Cover (tools/make-demo-covers.py).
 const char* const kCoverPaths[] = {
-    "sd:/config/images/2D/RMCP01.png", "sd:/config/images/2D/RHAP01.png",
-    "sd:/config/images/2D/RSPP01.png", "sd:/config/images/2D/RFNP01.png"};
+    "sd:/config/images/2D/ZWRP01.png", "sd:/config/images/2D/ZLTP01.png",
+    "sd:/config/images/2D/ZGLP01.png", "sd:/config/images/2D/ZOKP01.png"};
 const char kBrokenPath[] = "sd:/launcher/covers/wii/kaputt.png";
 
 }  // namespace
@@ -72,7 +72,7 @@ void runGfxDemo(WiiFs& fs) {
         }
 
         gfx::placeholder(220, 120, 160, 224, logo.img ? &logo : nullptr,
-                         "Super Mario Galaxy 2 \xE2\x80\x93 Sehr langer Titel");
+                         "Wolkenrennen \xE2\x80\x93 Ein sehr langer Demo-Titel");
 
         // Panel mit runden Ecken, rechts verankert (nutzt bei 16:9 die zusätzliche Breite)
         float px = W - 40 - 220;

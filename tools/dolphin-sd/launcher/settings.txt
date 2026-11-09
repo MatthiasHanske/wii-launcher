@@ -1,2 +1,2 @@
-systems=wii,gc,n64,snes,dos
+systems=wii,gc,n64,snes,nes,sega,dos
 extra_root=sd:/launcher/mock

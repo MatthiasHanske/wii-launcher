@@ -14,9 +14,12 @@
 # konvertiert Dolphin bei jedem Emulationsstart neu.
 #
 # Inhalt:
-#   config/images/2D/*.png     drei 2D-Cover (160x225) für den Texturcache
+#   config/images/2D/<ID>.png  eigene Demo-Cover (160x224) für Wii und GameCube
+#   launcher/covers/<system>/  eigene Demo-Cover der Emulator- und Adventure-Titel
+#                              (Cover und Mock-Baum erzeugt tools/make-demo-covers.py,
+#                              alle Titel frei erfunden)
 #   launcher/covers/wii/kaputt.png  10 Byte (PNG-Signatur + Müll): TexCache muss nullptr liefern
-#   launcher/mock/...          Mini-Spielebaum (Dateien mit wenigen Bytes)
+#   launcher/mock/...          Mini-Spielebaum mit 14 Demo-Titeln (Dateien mit wenigen Bytes)
 #   launcher/settings.txt      extra_root=sd:/launcher/mock, damit der Launcher ohne USB den
 #                              Mock-Baum zeigt (für das Fehlerbild "USB-Platte nicht gefunden"
 #                              die Zeile extra_root entfernen)
