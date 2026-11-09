@@ -42,16 +42,68 @@ Die Bilder stammen aus Dolphin mit der Testkarte unter `tools/dolphin-sd/`. Tite
 
 - Wii mit installiertem Homebrew Channel.
 - SD-Karte für den Launcher und die Startprogramme, USB-Platte für Spiele und ROMs.
-- Die Programme, die der Launcher aufruft, auf der SD-Karte (`tools/deploy-sd.sh` warnt, wenn welche fehlen):
-  - `apps/usbloader_gx/boot.dol` (USB Loader GX, für Wii und GameCube)
-  - `apps/not64/boot.dol` (N64)
-  - `apps/snes9xgx/boot.dol` (SNES)
-  - `apps/fceugx/boot.dol` (NES)
-  - `apps/genplus-gx/boot.dol` (Sega)
-  - `apps/scummvm/boot.elf` (ScummVM)
-  - `apps/dosbox-wii/boot.dol` (DOSBox)
+- Die Programme, die der Launcher aufruft, auf der SD-Karte (siehe unten). Nur die Programme der Systeme, die man nutzt, sind nötig. `tools/deploy-sd.sh` warnt, wenn welche fehlen.
 
-  Nur die Programme der Systeme, die man nutzt, sind nötig.
+## Aufbau von SD-Karte und USB-Platte
+
+Beide Datenträger FAT32. Der Launcher sucht die Pfade genau so, Groß- und Kleinschreibung der Ordner wie angegeben.
+
+SD-Karte:
+
+```
+sd:/
+├── apps/
+│   ├── launcher/            boot.dol, meta.xml, icon.png (dieser Launcher)
+│   ├── usbloader_gx/        boot.dol   Wii und GameCube
+│   ├── Nintendont/          boot.dol   GameCube (startet USB Loader GX, Pfad dort einstellbar)
+│   ├── not64/               boot.dol   N64
+│   ├── snes9xgx/            boot.dol   SNES
+│   ├── fceugx/              boot.dol   NES
+│   ├── genplus-gx/          boot.dol   Mega Drive, Master System, SG-1000
+│   ├── scummvm/             boot.elf   Adventure (ScummVM)
+│   └── dosbox-wii/          boot.dol   Adventure (DOSBox), dosbox.conf schreibt der Launcher
+├── config/images/2D/        <ID6>.png  Wii- und GameCube-Cover (von USB Loader GX geladen)
+├── launcher/
+│   ├── settings.txt         Einstellungen (siehe unten)
+│   ├── recent.txt           zuletzt gespielt (schreibt der Launcher)
+│   ├── launcher.log         Protokoll je Start (schreibt der Launcher)
+│   ├── dosbox.conf.tpl      Vorlage für dosbox.conf
+│   └── covers/
+│       ├── n64/  snes/  nes/  sega/    <ROM-Name ohne Endung>.png
+│       └── dos/             <Spielordner>.png
+├── not64/settings.cfg       schreibt der Launcher vor jedem N64-Start (ROM-Pfad)
+└── forwarder.dol            nur für den Priiloader-Autostart
+```
+
+USB-Platte:
+
+```
+usb:/
+├── wbfs/
+│   └── <Titel> [<ID6>]/<ID6>.wbfs     Wii (auch direkt als wbfs/<Titel> [<ID6>].wbfs)
+├── games/
+│   └── <Titel> [<ID6>]/game.iso       GameCube
+├── not64/roms/              .z64 .n64 .v64
+├── snes9xgx/roms/           .sfc .smc .zip
+├── fceugx/roms/             .nes .unf .zip
+├── genplus/roms/
+│   ├── md/                  .md .gen .smd .bin .zip
+│   ├── sms/                 .sms .zip
+│   └── sg/                  .sg .zip
+├── scummvm/<Spiel>/         Spieldateien, ScummVM erkennt das Spiel selbst
+└── dosbox/<Spiel>/          Spieldateien, optional autoexec.txt mit dem Startbefehl
+```
+
+Der Titel im Launcher entsteht aus dem Datei- bzw. Ordnernamen ohne Klammerzusätze wie `(Europe)` oder `[RMCP01]`. Ordner, die nicht existieren, werden übersprungen.
+
+`sd:/launcher/settings.txt` hat zwei Schlüssel:
+
+```
+systems=wii,gc,n64,snes,nes,sega,dos   # sichtbare Tabs, lässt sich auch im Launcher unter "Systeme" umschalten
+extra_root=                            # optional: zusätzlicher Wurzelordner mit derselben Struktur wie usb:/
+```
+
+`tools/dolphin-sd/` im Repo ist ein kleines Beispiel dieser Struktur (mit `extra_root=sd:/launcher/mock` als Ersatz für die USB-Platte).
 
 ## Installation aus dem Release-Paket
 
