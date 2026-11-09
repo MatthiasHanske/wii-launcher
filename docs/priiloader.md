@@ -54,7 +54,7 @@ Die installierte Version 0.8b1 (2012) wird ersetzt; erst ab 0.10.0 sind die Magi
 
 ## Rückweg prüfen
 
-Nach der Einrichtung diese Fälle einmal durchgehen und festhalten (Testprotokoll des Autors, nicht im Repo):
+Nach der Einrichtung diese Fälle einmal durchgehen:
 
 | Fall | Erwartung |
 |---|---|
