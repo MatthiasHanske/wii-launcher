@@ -32,6 +32,12 @@ Suche:
 
 ![Suche](docs/screenshots/04-suche.png)
 
+Darstellung bei 4:3:
+
+![4:3](docs/screenshots/06-4zu3.png)
+
+Die Bilder stammen aus Dolphin mit der Testkarte unter `tools/dolphin-sd/`. Titel und Cover darin sind erfunden.
+
 ## Voraussetzungen
 
 - Wii mit installiertem Homebrew Channel.
@@ -94,7 +100,7 @@ tools/wiiload.sh <Wii-IP>   # sendet launcher/launcher.dol, HBC muss laufen
 
 ## Cover
 
-Die Cover sind urheberrechtlich geschützt und liegen deshalb nicht im Repo. Der Download erfolgt durch den Nutzer für die eigene Sammlung, eine Weiterverbreitung ist nicht vorgesehen. Woher die Bilder kommen:
+Die Cover der Spiele sind urheberrechtlich geschützt und liegen deshalb nicht im Repo. Der Download erfolgt durch den Nutzer für die eigene Sammlung, eine Weiterverbreitung ist nicht vorgesehen. Woher die Bilder kommen:
 
 - Wii und GameCube: Der Launcher liest die 2D-Cover, die USB Loader GX selbst herunterlädt und unter `sd:/config/images/2D/<ID>.png` ablegt. Dazu in USB Loader GX den Cover-Download ausführen (Quelle dort ist GameTDB).
 - Emulator-Systeme und Adventure: `tools/covers-emu.py` (siehe unten), Quelle libretro-thumbnails.
@@ -131,9 +137,9 @@ Das Repo enthält keine Spiele, ROMs, BIOS-Dateien, Schlüssel oder fremde Cover
 
 ## Lizenz und Danksagung
 
-Der eigene Code steht unter der GNU General Public License. Die Datei `LICENSE` enthält den Text der GPL Version 2, in diesem README ist GPL-2.0-or-later als Absicht des Autors festgehalten.
+Der eigene Code (`launcher/`, `forwarder/`, `tests/`, `tools/`) steht unter der GNU General Public License, Version 2 oder später (GPL-2.0-or-later). Die Datei `LICENSE` enthält den Text der Version 2. Weil `booter/` nur unter Version 2 steht, gilt für das gebaute Programm insgesamt die GPL Version 2.
 
 - `booter/` ist der app_booter aus WiiFlow Lite (https://github.com/Fledge68/WiiFlow_Lite) unter GPL Version 2. Autor ist Dimok; `crt0.s`, `sync.c`, `string.c` und `link.ld` stammen von Segher Boessenkool. `elfloader.c` (William L. Pitts, Felix Domke) und `elf_abi.h` (Erik Theisen) stehen unter der BSD-artigen Lizenz in ihren Dateiköpfen. Details in `booter/README.md`.
-- libogc und devkitPro (devkitPPC) von Team Twiizers und devkitPro.
+- libogc und devkitPPC aus dem devkitPro-Projekt.
 - GRRLIB mit libpngu, dazu libpng, libjpeg, zlib, bzip2, brotli und FreeType aus den devkitPro-Portlibs sowie libfat und wiiuse.
 - Die Schrift Inter (Copyright The Inter Project Authors) unter der SIL Open Font License 1.1, siehe `launcher/data/font-LICENSE.txt`.
