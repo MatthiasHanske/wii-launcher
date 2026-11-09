@@ -28,7 +28,9 @@ import urllib.request
 
 USB = "/Volumes/WII-ROMS"
 SD = "/Volumes/WII"
-BACKUP = "/Users/matthias/Backups/WII-SD-2026-10-28"
+# Optional: Ordner mit einer Kopie der ROM-Ordner (gleiche Unterordner wie auf der USB-Platte),
+# nur fuer --dry-run, wenn die Platte nicht gemountet ist. Ohne Umgebungsvariable nicht verfuegbar.
+BACKUP = os.environ.get("WII_COVERS_BACKUP", "")
 CACHE = os.path.expanduser("~/.cache/wii-launcher-covers")
 ORG = "libretro-thumbnails"
 THRESHOLD = 0.85
@@ -265,6 +267,9 @@ def main():
     else:
         if not a.dry_run:
             print(f"{USB} nicht gemountet; ohne --dry-run nicht sinnvoll.", file=sys.stderr)
+            return 1
+        if not BACKUP or not os.path.isdir(BACKUP):
+            print(f"{USB} nicht gemountet und kein Backup-Ordner (Umgebungsvariable WII_COVERS_BACKUP).", file=sys.stderr)
             return 1
         base, dirs, adv_base, adv = BACKUP, BACKUP_DIRS, BACKUP, ADV_BACKUP
         print(f"Quelle: Backup {BACKUP} (USB nicht gemountet)")
